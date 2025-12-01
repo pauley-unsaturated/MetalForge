@@ -373,6 +373,46 @@ final class PrimitiveLibrary {
             documentation: "Returns 0 or 1 in a checkerboard pattern at the given scale.",
             unlockedBy: PuzzleID(world: 4, index: 5)
         ))
+
+        // Animation
+        register(PrimitiveDefinition(
+            name: "easeInOut",
+            category: .animation,
+            signature: "float easeInOut(float t)",
+            implementation: """
+                float easeInOut(float t) {
+                    return t < 0.5 ? 2.0 * t * t : 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0;
+                }
+                """,
+            documentation: "Eases in and out using quadratic curves. Input t should be 0 to 1.",
+            unlockedBy: PuzzleID(world: 5, index: 3)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "orbit2d",
+            category: .animation,
+            signature: "float2 orbit2d(float angle, float radius)",
+            implementation: """
+                float2 orbit2d(float angle, float radius) {
+                    return float2(cos(angle), sin(angle)) * radius;
+                }
+                """,
+            documentation: "Returns a point on a circle at the given angle and radius.",
+            unlockedBy: PuzzleID(world: 5, index: 4)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "wave",
+            category: .animation,
+            signature: "float wave(float x, float time, float freq, float speed, float amp)",
+            implementation: """
+                float wave(float x, float time, float freq, float speed, float amp) {
+                    return sin(x * freq + time * speed) * amp;
+                }
+                """,
+            documentation: "Returns a wave value for animated distortion effects.",
+            unlockedBy: PuzzleID(world: 5, index: 5)
+        ))
     }
 
     private func register(_ primitive: PrimitiveDefinition) {

@@ -44,6 +44,7 @@ final class PuzzleManager {
             createWorld2(),
             createWorld3(),
             createWorld4(),
+            createWorld5(),
         ]
 
         // Build cache
@@ -1927,6 +1928,423 @@ final class PuzzleManager {
                 float brick = step(mortar, f.x) * step(mortar, f.y);
                 float3 col = mix(float3(0.3, 0.3, 0.3), float3(0.6, 0.25, 0.15), brick);
                 return float4(col, 1.0);
+                """
+        )
+    }
+
+    // MARK: - World 5: Motion & Time
+
+    private func createWorld5() -> World {
+        World(
+            number: 5,
+            title: "Motion & Time",
+            description: "Bring your shaders to life with animation! Learn to use time-based functions for pulsing, oscillation, easing, and circular motion.",
+            puzzles: [
+                puzzle5_1(),
+                puzzle5_2(),
+                puzzle5_3(),
+                puzzle5_4(),
+                puzzle5_5(),
+            ]
+        )
+    }
+
+    private func puzzle5_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 5, index: 1),
+            title: "Pulse",
+            subtitle: "The heartbeat of animation",
+            description: """
+                Welcome to **Motion & Time**! Everything so far has been static—time to bring your shaders to life!
+
+                The [`sin()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) function oscillates between -1 and 1. Combined with time, it creates smooth animation:
+
+                ```
+                float pulse = sin(u.time);  // Oscillates -1 to 1
+                pulse = pulse * 0.5 + 0.5;  // Remap to 0 to 1
+                ```
+
+                The `u.time` uniform increases continuously. Multiplying it changes speed—`sin(u.time * 2.0)` pulses twice as fast!
+
+                Create a pulsing brightness effect where the screen smoothly fades between black and white.
+                """,
+            reference: .animation(
+                shader: """
+                    float brightness = sin(u.time) * 0.5 + 0.5;
+                    return float4(brightness, brightness, brightness, 1.0);
+                    """,
+                duration: 6.28
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 30, threshold: 0.98), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "sin() outputs values from -1 to 1, but brightness needs 0 to 1"),
+                Hint(cost: 0, text: "To remap -1...1 to 0...1: multiply by 0.5, then add 0.5"),
+                Hint(cost: 1, text: "Use sin(u.time) for the oscillation, then remap the result"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float brightness = sin(u.time);  // ERROR: This gives -1 to 1, need 0 to 1
+                    // Add: brightness = brightness * 0.5 + 0.5;
+                    return float4(brightness, brightness, brightness, 1.0);
+                    """),
+                Hint(cost: 3, text: "float brightness = sin(u.time) * 0.5 + 0.5;"),
+            ],
+            starterCode: """
+                // Create a pulsing brightness animation
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Use sin(u.time) to create oscillation
+                    // Remember to remap from -1...1 to 0...1
+
+                    float brightness = 0.5;  // TODO: Make this pulse over time
+
+                    return float4(brightness, brightness, brightness, 1.0);
+                }
+                """,
+            solution: """
+                float brightness = sin(u.time) * 0.5 + 0.5;
+                return float4(brightness, brightness, brightness, 1.0);
+                """
+        )
+    }
+
+    private func puzzle5_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 5, index: 2),
+            title: "Breathing Circle",
+            subtitle: "Animated shapes",
+            description: """
+                Now let's animate a shape! We'll make a circle that "breathes"—smoothly expanding and contracting.
+
+                Combine your SDF knowledge with time-based animation:
+
+                ```
+                float radius = 0.2 + sin(u.time) * 0.1;  // Radius oscillates 0.1 to 0.3
+                float d = length(p) - radius;            // Circle SDF with animated radius
+                ```
+
+                You can also use [`mix()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=80) to interpolate between min and max radius:
+
+                ```
+                float t = sin(u.time) * 0.5 + 0.5;  // 0 to 1
+                float radius = mix(0.1, 0.3, t);    // Interpolate between 0.1 and 0.3
+                ```
+
+                Create a white circle on black background that smoothly breathes between radius 0.15 and 0.35.
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv - 0.5;
+                    float t = sin(u.time) * 0.5 + 0.5;
+                    float radius = mix(0.15, 0.35, t);
+                    float d = length(p) - radius;
+                    float circle = 1.0 - step(0.0, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """,
+                duration: 6.28
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 30, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "First center your coordinates: p = uv - 0.5"),
+                Hint(cost: 0, text: "mix(a, b, t) smoothly interpolates between a and b when t goes from 0 to 1"),
+                Hint(cost: 1, text: "Use sin(u.time) * 0.5 + 0.5 to get a 0-1 oscillation for the mix() function"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv - 0.5;
+                    float t = sin(u.time);  // ERROR: Need to remap to 0-1 with * 0.5 + 0.5
+                    float radius = 0.25;    // ERROR: Should be mix(0.15, 0.35, t)
+                    float d = length(p) - radius;
+                    float circle = 1.0 - step(0.0, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """),
+                Hint(cost: 3, text: "float t = sin(u.time) * 0.5 + 0.5; float radius = mix(0.15, 0.35, t);"),
+            ],
+            starterCode: """
+                // Create a breathing circle animation
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Center coordinates
+                    float2 p = uv - 0.5;
+
+                    // TODO: Animate radius between 0.15 and 0.35
+                    // Hint: Use sin(u.time) * 0.5 + 0.5 for t, then mix(0.15, 0.35, t)
+                    float radius = 0.25;
+
+                    // Circle SDF
+                    float d = length(p) - radius;
+                    float circle = 1.0 - step(0.0, d);
+
+                    return float4(circle, circle, circle, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv - 0.5;
+                float t = sin(u.time) * 0.5 + 0.5;
+                float radius = mix(0.15, 0.35, t);
+                float d = length(p) - radius;
+                float circle = 1.0 - step(0.0, d);
+                return float4(circle, circle, circle, 1.0);
+                """
+        )
+    }
+
+    private func puzzle5_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 5, index: 3),
+            title: "Ease In, Ease Out",
+            subtitle: "Natural motion curves",
+            description: """
+                Linear motion feels robotic. Real objects **ease in** (accelerate) and **ease out** (decelerate).
+
+                The smoothstep function we used for anti-aliasing is actually an **easing function**! It provides smooth acceleration and deceleration:
+
+                ```
+                float t = fract(u.time * 0.5);         // 0→1 repeating
+                float eased = smoothstep(0.0, 1.0, t); // Ease in and out
+                ```
+
+                For more dramatic easing, try polynomial curves:
+                - **Ease in**: `t * t` (starts slow)
+                - **Ease out**: `1.0 - (1.0 - t) * (1.0 - t)` (ends slow)
+                - **Ease in-out**: `t < 0.5 ? 2*t*t : 1-pow(-2*t+2,2)/2`
+
+                Create a circle that moves left-to-right with smooth ease-in-out motion, pausing briefly at each side.
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv - 0.5;
+                    float t = fract(u.time * 0.3);
+                    float eased = smoothstep(0.0, 1.0, t);
+                    float x = mix(-0.3, 0.3, eased);
+                    float d = length(p - float2(x, 0.0)) - 0.1;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """,
+                duration: 10.5
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 30, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .animation,
+                functionName: "easeInOut",
+                signature: "float easeInOut(float t)",
+                implementation: "return t < 0.5 ? 2.0 * t * t : 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0;",
+                documentation: "Eases in and out using quadratic curves. Input t should be 0 to 1."
+            ),
+            hints: [
+                Hint(cost: 0, text: "fract(u.time * speed) creates a repeating 0→1 animation cycle"),
+                Hint(cost: 0, text: "smoothstep(0, 1, t) naturally provides ease-in and ease-out"),
+                Hint(cost: 1, text: "Use the eased value with mix(-0.3, 0.3, eased) for x position"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv - 0.5;
+                    float t = fract(u.time * 0.3);
+                    float eased = t;  // ERROR: Should be smoothstep(0.0, 1.0, t) for easing
+                    float x = eased;  // ERROR: Should be mix(-0.3, 0.3, eased)
+                    float d = length(p - float2(x, 0.0)) - 0.1;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """),
+                Hint(cost: 3, text: "float eased = smoothstep(0.0, 1.0, t); float x = mix(-0.3, 0.3, eased);"),
+            ],
+            starterCode: """
+                // Create eased left-right motion
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv - 0.5;
+
+                    // Create repeating 0→1 time
+                    float t = fract(u.time * 0.3);
+
+                    // TODO: Apply easing with smoothstep
+                    float eased = t;  // Replace with smoothstep
+
+                    // TODO: Calculate x position from -0.3 to 0.3
+                    float x = 0.0;  // Replace with mix
+
+                    // Draw circle at position
+                    float d = length(p - float2(x, 0.0)) - 0.1;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+
+                    return float4(circle, circle, circle, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv - 0.5;
+                float t = fract(u.time * 0.3);
+                float eased = smoothstep(0.0, 1.0, t);
+                float x = mix(-0.3, 0.3, eased);
+                float d = length(p - float2(x, 0.0)) - 0.1;
+                float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                return float4(circle, circle, circle, 1.0);
+                """
+        )
+    }
+
+    private func puzzle5_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 5, index: 4),
+            title: "Orbit",
+            subtitle: "Circular motion",
+            description: """
+                Time for **circular motion**! An orbiting point traces a circle using sine and cosine:
+
+                ```
+                float angle = u.time;
+                float x = cos(angle) * radius;
+                float y = sin(angle) * radius;
+                ```
+
+                [`cos()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) gives the x-component, [`sin()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) gives the y-component. Together they trace a circle!
+
+                - Speed: multiply angle (`u.time * 2.0` = twice as fast)
+                - Radius: multiply the result (`cos(angle) * 0.3` = larger orbit)
+                - Starting angle: add offset (`cos(angle + 1.57)` = start at different position)
+
+                Create a small circle orbiting around the center with radius 0.25.
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv - 0.5;
+                    float angle = u.time;
+                    float2 orbitPos = float2(cos(angle), sin(angle)) * 0.25;
+                    float d = length(p - orbitPos) - 0.05;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """,
+                duration: 6.28
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 30, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .animation,
+                functionName: "orbit2d",
+                signature: "float2 orbit2d(float angle, float radius)",
+                implementation: "return float2(cos(angle), sin(angle)) * radius;",
+                documentation: "Returns a point on a circle at the given angle and radius."
+            ),
+            hints: [
+                Hint(cost: 0, text: "cos(angle) gives x, sin(angle) gives y for circular motion"),
+                Hint(cost: 0, text: "Multiply both cos and sin by the orbit radius (0.25)"),
+                Hint(cost: 1, text: "float2 orbitPos = float2(cos(u.time), sin(u.time)) * 0.25;"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float2 p = uv - 0.5;
+                    float angle = u.time;
+                    float2 orbitPos = float2(cos(angle), sin(angle));  // ERROR: Missing * 0.25 for radius
+                    float d = length(p - orbitPos) - 0.05;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                    return float4(circle, circle, circle, 1.0);
+                    """),
+                Hint(cost: 3, text: "float2 orbitPos = float2(cos(angle), sin(angle)) * 0.25;"),
+            ],
+            starterCode: """
+                // Create an orbiting circle
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv - 0.5;
+
+                    // Calculate orbit position
+                    float angle = u.time;
+
+                    // TODO: Create orbit position using cos/sin
+                    // Orbit radius should be 0.25
+                    float2 orbitPos = float2(0.0, 0.0);  // Replace with orbit calculation
+
+                    // Draw small circle at orbit position
+                    float d = length(p - orbitPos) - 0.05;
+                    float circle = 1.0 - smoothstep(0.0, 0.01, d);
+
+                    return float4(circle, circle, circle, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv - 0.5;
+                float angle = u.time;
+                float2 orbitPos = float2(cos(angle), sin(angle)) * 0.25;
+                float d = length(p - orbitPos) - 0.05;
+                float circle = 1.0 - smoothstep(0.0, 0.01, d);
+                return float4(circle, circle, circle, 1.0);
+                """
+        )
+    }
+
+    private func puzzle5_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 5, index: 5),
+            title: "Wave",
+            subtitle: "Animated distortion",
+            description: """
+                Let's combine everything to create a **wave effect**! Waves are created by offsetting position based on sine:
+
+                ```
+                float wave = sin(uv.x * frequency + u.time * speed) * amplitude;
+                uv.y += wave;  // Distort y based on x position and time
+                ```
+
+                - **Frequency**: How many waves (`uv.x * 10.0` = 10 waves across screen)
+                - **Speed**: How fast they move (`u.time * 2.0` = faster)
+                - **Amplitude**: How tall (`* 0.1` = 10% of screen height)
+
+                Create a horizontal stripe pattern with animated wave distortion. The stripes should undulate like a flag!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv;
+                    float wave = sin(p.x * 10.0 + u.time * 3.0) * 0.05;
+                    p.y += wave;
+                    float stripes = step(0.5, fract(p.y * 8.0));
+                    return float4(stripes, stripes, stripes, 1.0);
+                    """,
+                duration: 6.28
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 30, threshold: 0.95), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .animation,
+                functionName: "wave",
+                signature: "float wave(float x, float time, float freq, float speed, float amp)",
+                implementation: "return sin(x * freq + time * speed) * amp;",
+                documentation: "Returns a wave value for animated distortion effects."
+            ),
+            hints: [
+                Hint(cost: 0, text: "sin(x * frequency + time * speed) creates a moving wave"),
+                Hint(cost: 0, text: "Add the wave to uv.y to create vertical distortion"),
+                Hint(cost: 1, text: "Use fract(p.y * 8.0) and step(0.5, ...) for stripe pattern"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv;
+                    float wave = sin(p.x * 10.0);  // ERROR: Missing + u.time * 3.0 for animation
+                    p.y += wave;  // ERROR: wave amplitude too large, should be wave * 0.05 or similar
+                    float stripes = fract(p.y * 8.0);  // ERROR: Should be step(0.5, fract(...))
+                    return float4(stripes, stripes, stripes, 1.0);
+                    """),
+                Hint(cost: 3, text: "float wave = sin(p.x * 10.0 + u.time * 3.0) * 0.05; p.y += wave; float stripes = step(0.5, fract(p.y * 8.0));"),
+            ],
+            starterCode: """
+                // Create animated wave distortion
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv;
+
+                    // TODO: Calculate wave offset
+                    // Use sin(p.x * freq + u.time * speed) * amplitude
+                    float wave = 0.0;
+
+                    // Apply wave distortion
+                    p.y += wave;
+
+                    // TODO: Create horizontal stripe pattern
+                    // Use step(0.5, fract(p.y * 8.0))
+                    float stripes = 0.5;
+
+                    return float4(stripes, stripes, stripes, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv;
+                float wave = sin(p.x * 10.0 + u.time * 3.0) * 0.05;
+                p.y += wave;
+                float stripes = step(0.5, fract(p.y * 8.0));
+                return float4(stripes, stripes, stripes, 1.0);
                 """
         )
     }
