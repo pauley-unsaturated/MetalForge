@@ -43,6 +43,7 @@ final class PuzzleManager {
             createWorld1(),
             createWorld2(),
             createWorld3(),
+            createWorld4(),
         ]
 
         // Build cache
@@ -1311,6 +1312,620 @@ final class PuzzleManager {
                 float3 a = float3(uv.x, uv.x * 0.5, 0.2);
                 float3 b = float3(0.2, uv.y * 0.8, uv.y);
                 float3 col = 1.0 - (1.0 - a) * (1.0 - b);
+                return float4(col, 1.0);
+                """
+        )
+    }
+
+    // MARK: - World 4: Noise & Patterns
+
+    private func createWorld4() -> World {
+        World(
+            number: 4,
+            title: "Noise & Patterns",
+            description: "Procedural textures, hash functions, and noise algorithms",
+            puzzles: [
+                puzzle4_1(),
+                puzzle4_2(),
+                puzzle4_3(),
+                puzzle4_4(),
+                puzzle4_5(),
+                puzzle4_6(),
+            ]
+        )
+    }
+
+    private func puzzle4_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 1),
+            title: "Static",
+            subtitle: "The hash function",
+            description: """
+                Welcome to procedural noise! The foundation of all procedural textures is the **hash function** - a way to generate pseudo-random numbers from coordinates.
+
+                A good hash function:
+                - Always returns the same value for the same input
+                - Looks random (no visible patterns)
+                - Is fast to compute
+
+                The classic shader hash uses [`sin()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) and [`fract()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70):
+
+                ```
+                fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453)
+                ```
+
+                Create TV static by hashing the pixel coordinates!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = floor(uv * 100.0);
+                    float n = fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                    return float4(n, n, n, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .noise,
+                functionName: "hash",
+                signature: "float hash(float2 p)",
+                implementation: "return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);",
+                documentation: "Simple hash function for pseudo-random values from 2D coordinates."
+            ),
+            hints: [
+                Hint(cost: 0, text: "dot() combines x and y into a single value, sin() scrambles it, fract() keeps just the decimal"),
+                Hint(cost: 0, text: "floor(uv * 100.0) creates a grid of 100×100 cells, each with its own random value"),
+                Hint(cost: 1, text: "The magic numbers (127.1, 311.7, 43758.5453) are chosen to minimize visible patterns"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float2 p = floor(uv * 100.0);
+                    float n = sin(dot(p, float2(127.1, 311.7))) * 43758.5453;  // ERROR: Missing fract() wrapper
+                    return float4(n, n, n, 1.0);
+                    """),
+                Hint(cost: 3, text: "float n = fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);"),
+            ],
+            starterCode: """
+                // Create TV static using a hash function
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Create a grid of cells
+                    float2 p = floor(uv * 100.0);  // 100x100 grid
+
+                    // TODO: Hash the cell coordinates to get random value 0-1
+                    // Formula: fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453)
+                    float n = 0.5;  // Replace with hash
+
+                    return float4(n, n, n, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = floor(uv * 100.0);
+                float n = fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                return float4(n, n, n, 1.0);
+                """
+        )
+    }
+
+    private func puzzle4_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 2),
+            title: "Smooth Static",
+            subtitle: "Value noise interpolation",
+            description: """
+                Raw hash looks like TV static - too harsh for organic textures. **Value noise** fixes this by:
+
+                1. Hashing corner values of each grid cell
+                2. Smoothly interpolating between them using [`mix()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=80)
+
+                The key insight: use `fract(p)` for interpolation weights, but apply **smoothstep** to avoid linear interpolation artifacts:
+
+                ```
+                f = f * f * (3.0 - 2.0 * f)  // Smooth interpolation curve
+                ```
+
+                Create smooth, cloud-like noise!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv * 8.0;
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = fract(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+                    float b = fract(sin(dot(i + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                    float c = fract(sin(dot(i + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float d = fract(sin(dot(i + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float n = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    return float4(n, n, n, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .noise,
+                functionName: "valueNoise",
+                signature: "float valueNoise(float2 p)",
+                implementation: """
+                    float2 i = floor(p); float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = fract(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+                    float b = fract(sin(dot(i + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                    float c = fract(sin(dot(i + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float d = fract(sin(dot(i + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    """,
+                documentation: "Value noise with smooth interpolation."
+            ),
+            hints: [
+                Hint(cost: 0, text: "i = floor(p) gives the cell corner, f = fract(p) gives position within cell"),
+                Hint(cost: 0, text: "Hash all four corners: (i), (i+1,0), (i+0,1), (i+1,1)"),
+                Hint(cost: 1, text: "Use nested mix(): mix(mix(a,b,f.x), mix(c,d,f.x), f.y) for bilinear interpolation"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv * 8.0;
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    // f = f * f * (3.0 - 2.0 * f);  // ERROR: This smoothing line is missing!
+                    float a = fract(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+                    float b = fract(sin(dot(i + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                    float c = fract(sin(dot(i + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float d = fract(sin(dot(i + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float n = mix(a, d, f.x);  // ERROR: Need proper bilinear: mix(mix(a,b,f.x), mix(c,d,f.x), f.y)
+                    return float4(n, n, n, 1.0);
+                    """),
+                Hint(cost: 3, text: "f = f * f * (3.0 - 2.0 * f); ... float n = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);"),
+            ],
+            starterCode: """
+                // Create smooth value noise
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv * 8.0;  // Scale up for visible cells
+
+                    // Separate integer and fractional parts
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+
+                    // TODO: Apply smoothing curve to f
+                    // f = f * f * (3.0 - 2.0 * f);
+
+                    // Hash the four corners
+                    float a = fract(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+                    float b = fract(sin(dot(i + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                    float c = fract(sin(dot(i + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float d = fract(sin(dot(i + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+
+                    // TODO: Bilinear interpolation
+                    float n = a;  // Replace with proper interpolation
+
+                    return float4(n, n, n, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv * 8.0;
+                float2 i = floor(p);
+                float2 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float a = fract(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+                float b = fract(sin(dot(i + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                float c = fract(sin(dot(i + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                float d = fract(sin(dot(i + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                float n = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                return float4(n, n, n, 1.0);
+                """
+        )
+    }
+
+    private func puzzle4_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 3),
+            title: "Voronoi Cells",
+            subtitle: "Cellular noise",
+            description: """
+                **Voronoi noise** (also called cellular noise) creates organic cell patterns. The algorithm:
+
+                1. Scatter random points across a grid
+                2. For each pixel, find the distance to the nearest point
+                3. That distance becomes the output value
+
+                This creates patterns like:
+                - Stone tiles
+                - Giraffe spots
+                - Cracked earth
+                - Cell structures
+
+                Generate a basic Voronoi pattern with distance visualization!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv * 5.0;
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    float minDist = 1.0;
+                    for (int y = -1; y <= 1; y++) {
+                        for (int x = -1; x <= 1; x++) {
+                            float2 neighbor = float2(float(x), float(y));
+                            float2 cellPos = i + neighbor;
+                            float2 point = fract(sin(float2(dot(cellPos, float2(127.1, 311.7)), dot(cellPos, float2(269.5, 183.3)))) * 43758.5453);
+                            float2 diff = neighbor + point - f;
+                            float dist = length(diff);
+                            minDist = min(minDist, dist);
+                        }
+                    }
+                    return float4(minDist, minDist, minDist, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: VerificationSettings(mode: .threshold(0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .noise,
+                functionName: "voronoi",
+                signature: "float voronoi(float2 p)",
+                implementation: """
+                    float2 i = floor(p); float2 f = fract(p); float minDist = 1.0;
+                    for (int y = -1; y <= 1; y++) { for (int x = -1; x <= 1; x++) {
+                        float2 neighbor = float2(float(x), float(y));
+                        float2 cellPos = i + neighbor;
+                        float2 point = fract(sin(float2(dot(cellPos, float2(127.1, 311.7)), dot(cellPos, float2(269.5, 183.3)))) * 43758.5453);
+                        minDist = min(minDist, length(neighbor + point - f));
+                    }} return minDist;
+                    """,
+                documentation: "Returns distance to nearest Voronoi cell center."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Check all 9 neighboring cells (3×3 grid) to find the nearest point"),
+                Hint(cost: 0, text: "Each cell has a random point position: hash the cell coordinates to get it"),
+                Hint(cost: 1, text: "diff = neighbor + point - f gives vector from current position to the point"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float2 p = uv * 5.0;
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    float minDist = 1.0;
+                    for (int y = -1; y <= 1; y++) {
+                        for (int x = -1; x <= 1; x++) {
+                            float2 neighbor = float2(float(x), float(y));
+                            float2 cellPos = i + neighbor;
+                            float2 point = fract(sin(float2(dot(cellPos, float2(127.1, 311.7)), dot(cellPos, float2(269.5, 183.3)))) * 43758.5453);
+                            float2 diff = neighbor + point - f;
+                            float dist = length(diff);
+                            minDist = dist;  // ERROR: Should be min(minDist, dist)
+                        }
+                    }
+                    return float4(minDist, minDist, minDist, 1.0);
+                    """),
+                Hint(cost: 3, text: "minDist = min(minDist, dist);"),
+            ],
+            starterCode: """
+                // Create Voronoi cellular noise
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv * 5.0;  // Scale for visible cells
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+
+                    float minDist = 1.0;
+
+                    // Check 3x3 neighborhood
+                    for (int y = -1; y <= 1; y++) {
+                        for (int x = -1; x <= 1; x++) {
+                            float2 neighbor = float2(float(x), float(y));
+                            float2 cellPos = i + neighbor;
+
+                            // Random point in cell (hash cell position)
+                            float2 point = fract(sin(float2(
+                                dot(cellPos, float2(127.1, 311.7)),
+                                dot(cellPos, float2(269.5, 183.3))
+                            )) * 43758.5453);
+
+                            // Distance to this point
+                            float2 diff = neighbor + point - f;
+                            float dist = length(diff);
+
+                            // TODO: Track minimum distance
+                            // minDist = ???
+                        }
+                    }
+
+                    return float4(minDist, minDist, minDist, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv * 5.0;
+                float2 i = floor(p);
+                float2 f = fract(p);
+                float minDist = 1.0;
+                for (int y = -1; y <= 1; y++) {
+                    for (int x = -1; x <= 1; x++) {
+                        float2 neighbor = float2(float(x), float(y));
+                        float2 cellPos = i + neighbor;
+                        float2 point = fract(sin(float2(dot(cellPos, float2(127.1, 311.7)), dot(cellPos, float2(269.5, 183.3)))) * 43758.5453);
+                        float2 diff = neighbor + point - f;
+                        float dist = length(diff);
+                        minDist = min(minDist, dist);
+                    }
+                }
+                return float4(minDist, minDist, minDist, 1.0);
+                """
+        )
+    }
+
+    private func puzzle4_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 4),
+            title: "Layered Noise",
+            subtitle: "Fractal Brownian Motion",
+            description: """
+                Single-frequency noise looks artificial. Nature has detail at every scale! **Fractal Brownian Motion (FBM)** fixes this by layering multiple **octaves** of noise:
+
+                Each octave:
+                - **Doubles the frequency** (smaller features)
+                - **Halves the amplitude** (less influence)
+
+                ```
+                for (int i = 0; i < octaves; i++) {
+                    value += amplitude * noise(p);
+                    p *= 2.0;        // Double frequency
+                    amplitude *= 0.5; // Halve amplitude
+                }
+                ```
+
+                Create rich, cloud-like textures with 5 octaves!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv * 4.0;
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    for (int i = 0; i < 5; i++) {
+                        float2 ip = floor(p); float2 fp = fract(p);
+                        fp = fp * fp * (3.0 - 2.0 * fp);
+                        float a = fract(sin(dot(ip, float2(127.1, 311.7))) * 43758.5453);
+                        float b = fract(sin(dot(ip + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                        float c = fract(sin(dot(ip + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        float d = fract(sin(dot(ip + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        float n = mix(mix(a, b, fp.x), mix(c, d, fp.x), fp.y);
+                        value += amplitude * n;
+                        p *= 2.0;
+                        amplitude *= 0.5;
+                    }
+                    return float4(value, value, value, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .noise,
+                functionName: "fbm",
+                signature: "float fbm(float2 p, int octaves)",
+                implementation: """
+                    float value = 0.0; float amplitude = 0.5;
+                    for (int i = 0; i < octaves; i++) {
+                        float2 ip = floor(p); float2 fp = fract(p);
+                        fp = fp * fp * (3.0 - 2.0 * fp);
+                        float a = fract(sin(dot(ip, float2(127.1, 311.7))) * 43758.5453);
+                        float b = fract(sin(dot(ip + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                        float c = fract(sin(dot(ip + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        float d = fract(sin(dot(ip + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        value += amplitude * mix(mix(a, b, fp.x), mix(c, d, fp.x), fp.y);
+                        p *= 2.0; amplitude *= 0.5;
+                    } return value;
+                    """,
+                documentation: "Fractal Brownian Motion - layered noise with decreasing amplitude."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Start with amplitude 0.5, then halve it each octave: 0.5, 0.25, 0.125..."),
+                Hint(cost: 0, text: "Double the frequency by multiplying p by 2.0 each iteration"),
+                Hint(cost: 1, text: "Accumulate: value += amplitude * noise(p); then update p and amplitude"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv * 4.0;
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    for (int i = 0; i < 5; i++) {
+                        // ... noise calculation gives 'n' ...
+                        value += n;  // ERROR: Should be value += amplitude * n
+                        p += 2.0;    // ERROR: Should MULTIPLY: p *= 2.0
+                        amplitude *= 0.5;
+                    }
+                    return float4(value, value, value, 1.0);
+                    """),
+                Hint(cost: 3, text: "value += amplitude * n; p *= 2.0;"),
+            ],
+            starterCode: """
+                // Create FBM with 5 octaves of noise
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv * 4.0;
+                    float value = 0.0;
+                    float amplitude = 0.5;
+
+                    for (int i = 0; i < 5; i++) {
+                        // Value noise calculation
+                        float2 ip = floor(p); float2 fp = fract(p);
+                        fp = fp * fp * (3.0 - 2.0 * fp);
+                        float a = fract(sin(dot(ip, float2(127.1, 311.7))) * 43758.5453);
+                        float b = fract(sin(dot(ip + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                        float c = fract(sin(dot(ip + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        float d = fract(sin(dot(ip + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                        float n = mix(mix(a, b, fp.x), mix(c, d, fp.x), fp.y);
+
+                        // TODO: Accumulate with amplitude, update p and amplitude
+                        value += n;  // Fix this line
+                        // Update frequency and amplitude for next octave
+                    }
+
+                    return float4(value, value, value, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv * 4.0;
+                float value = 0.0;
+                float amplitude = 0.5;
+                for (int i = 0; i < 5; i++) {
+                    float2 ip = floor(p); float2 fp = fract(p);
+                    fp = fp * fp * (3.0 - 2.0 * fp);
+                    float a = fract(sin(dot(ip, float2(127.1, 311.7))) * 43758.5453);
+                    float b = fract(sin(dot(ip + float2(1.0, 0.0), float2(127.1, 311.7))) * 43758.5453);
+                    float c = fract(sin(dot(ip + float2(0.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float d = fract(sin(dot(ip + float2(1.0, 1.0), float2(127.1, 311.7))) * 43758.5453);
+                    float n = mix(mix(a, b, fp.x), mix(c, d, fp.x), fp.y);
+                    value += amplitude * n;
+                    p *= 2.0;
+                    amplitude *= 0.5;
+                }
+                return float4(value, value, value, 1.0);
+                """
+        )
+    }
+
+    private func puzzle4_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 5),
+            title: "Checkerboard",
+            subtitle: "Mathematical patterns",
+            description: """
+                Let's take a break from noise for a classic pattern: the **checkerboard**.
+
+                The key insight: `floor(x) + floor(y)` alternates between even and odd values. Use [`fract()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) to turn this into 0 or 0.5:
+
+                ```
+                fract((floor(x) + floor(y)) * 0.5) * 2.0
+                ```
+
+                This returns 0 for even squares, 1 for odd squares!
+
+                Create an 8×8 checkerboard.
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = floor(uv * 8.0);
+                    float checker = fract((p.x + p.y) * 0.5) * 2.0;
+                    return float4(checker, checker, checker, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .pixelPerfect,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .noise,
+                functionName: "checker",
+                signature: "float checker(float2 p, float scale)",
+                implementation: "float2 q = floor(p * scale); return fract((q.x + q.y) * 0.5) * 2.0;",
+                documentation: "Returns 0 or 1 in a checkerboard pattern at the given scale."
+            ),
+            hints: [
+                Hint(cost: 0, text: "floor(uv * 8.0) gives you integer cell coordinates"),
+                Hint(cost: 0, text: "Adding x + y gives alternating even/odd pattern"),
+                Hint(cost: 1, text: "Multiply by 0.5, take fract(), then multiply by 2.0 to get clean 0 or 1"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float2 p = floor(uv * 8.0);
+                    float checker = fract(p.x + p.y) * 2.0;  // ERROR: Should be fract((p.x + p.y) * 0.5) * 2.0
+                    return float4(checker, checker, checker, 1.0);
+                    """),
+                Hint(cost: 3, text: "float checker = fract((p.x + p.y) * 0.5) * 2.0;"),
+            ],
+            starterCode: """
+                // Create an 8x8 checkerboard pattern
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Get cell coordinates
+                    float2 p = floor(uv * 8.0);
+
+                    // TODO: Calculate checker pattern (0 or 1)
+                    // Hint: Use fract((p.x + p.y) * 0.5) * 2.0
+                    float checker = 0.0;  // Replace with formula
+
+                    return float4(checker, checker, checker, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = floor(uv * 8.0);
+                float checker = fract((p.x + p.y) * 0.5) * 2.0;
+                return float4(checker, checker, checker, 1.0);
+                """
+        )
+    }
+
+    private func puzzle4_6() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 4, index: 6),
+            title: "Brick Wall",
+            subtitle: "Offset patterns",
+            description: """
+                Checkerboards are nice, but real patterns often have **offset rows**. A brick wall pattern offsets every other row by half a brick width.
+
+                The trick: shift x by 0.5 for odd rows:
+
+                ```
+                if (fract(floor(y) * 0.5) > 0.25) {
+                    x += 0.5;
+                }
+                ```
+
+                Or more elegantly: `x += fract(floor(y) * 0.5)`
+
+                Create a brick pattern with highlighted mortar lines!
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv * float2(8.0, 4.0);
+                    p.x += fract(floor(p.y) * 0.5);
+                    float2 f = fract(p);
+                    float mortar = 0.05;
+                    float brick = step(mortar, f.x) * step(mortar, f.y);
+                    float3 col = mix(float3(0.3, 0.3, 0.3), float3(0.6, 0.25, 0.15), brick);
+                    return float4(col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "Use different scales for x and y to get rectangular bricks (wider than tall)"),
+                Hint(cost: 0, text: "fract(floor(y) * 0.5) is 0 for even rows, 0.5 for odd rows"),
+                Hint(cost: 1, text: "Use step() with a small threshold to create mortar lines at edges"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv * float2(8.0, 4.0);
+                    // p.x += ???;  // ERROR: Missing row offset: fract(floor(p.y) * 0.5)
+                    float2 f = fract(p);
+                    float mortar = 0.05;
+                    float brick = step(mortar, f.x);  // ERROR: Also need step(mortar, f.y)
+                    float3 col = mix(float3(0.3, 0.3, 0.3), float3(0.6, 0.25, 0.15), brick);
+                    return float4(col, 1.0);
+                    """),
+                Hint(cost: 3, text: "p.x += fract(floor(p.y) * 0.5); ... float brick = step(mortar, f.x) * step(mortar, f.y);"),
+            ],
+            starterCode: """
+                // Create a brick wall pattern
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Scale: 8 bricks wide, 4 high (bricks are 2:1 ratio)
+                    float2 p = uv * float2(8.0, 4.0);
+
+                    // TODO: Offset every other row by half a brick
+                    // Hint: p.x += fract(floor(p.y) * 0.5)
+
+                    // Get position within brick
+                    float2 f = fract(p);
+
+                    // Mortar is visible at edges
+                    float mortar = 0.05;
+                    float brick = 1.0;  // TODO: Use step() to create mortar lines
+
+                    // Color: gray mortar, red-brown brick
+                    float3 col = mix(float3(0.3, 0.3, 0.3), float3(0.6, 0.25, 0.15), brick);
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv * float2(8.0, 4.0);
+                p.x += fract(floor(p.y) * 0.5);
+                float2 f = fract(p);
+                float mortar = 0.05;
+                float brick = step(mortar, f.x) * step(mortar, f.y);
+                float3 col = mix(float3(0.3, 0.3, 0.3), float3(0.6, 0.25, 0.15), brick);
                 return float4(col, 1.0);
                 """
         )
