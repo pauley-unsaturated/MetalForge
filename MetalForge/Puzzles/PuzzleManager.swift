@@ -49,6 +49,7 @@ final class PuzzleManager {
             createWorld7(),
             createWorld8(),
             createWorld9(),
+            createWorld10(),
         ]
 
         // Build cache
@@ -5302,6 +5303,601 @@ final class PuzzleManager {
             solution: """
                 z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
                 z += pos;
+                """
+        )
+    }
+
+    // MARK: - World 10: The Forge
+
+    private func createWorld10() -> World {
+        World(
+            number: 10,
+            title: "The Forge",
+            description: "The ultimate test: combine everything you've learned to create stunning shader art",
+            puzzles: [
+                puzzle10_1(),
+                puzzle10_2(),
+                puzzle10_3(),
+            ]
+        )
+    }
+
+    private func puzzle10_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 10, index: 1),
+            title: "Procedural Planet",
+            subtitle: "A world made of math",
+            description: """
+                Combine noise, SDFs, and lighting to create a procedural planet with terrain and atmosphere.
+
+                Layer multiple noise octaves to create terrain displacement on a sphere. Add lighting for the day/night terminator and a subtle atmospheric glow at the edges.
+
+                Key techniques:
+                - FBM noise for terrain height
+                - Sphere SDF with noise displacement
+                - Lambert diffuse for the sun
+                - Fresnel for atmosphere rim lighting
+
+                Your goal: Add the atmospheric rim glow using the Fresnel effect (bright edges where view angle is grazing).
+                """,
+            reference: .animation(
+                shader: """
+                    float _pHash(float2 p) {
+                        return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                    }
+                    float _pNoise(float2 p) {
+                        float2 i = floor(p);
+                        float2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        float a = _pHash(i);
+                        float b = _pHash(i + float2(1.0, 0.0));
+                        float c = _pHash(i + float2(0.0, 1.0));
+                        float d = _pHash(i + float2(1.0, 1.0));
+                        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    }
+                    float fbm(float2 p) {
+                        float v = 0.0; float a = 0.5;
+                        for (int i = 0; i < 5; i++) { v += a * _pNoise(p); p *= 2.0; a *= 0.5; }
+                        return v;
+                    }
+                    float planetSDF(float3 p) {
+                        float theta = atan2(p.z, p.x);
+                        float phi = asin(clamp(p.y / length(p), -1.0, 1.0));
+                        float terrain = fbm(float2(theta * 3.0, phi * 3.0)) * 0.1;
+                        return length(p) - 1.0 - terrain;
+                    }
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            planetSDF(p + e.xyy) - planetSDF(p - e.xyy),
+                            planetSDF(p + e.yxy) - planetSDF(p - e.yxy),
+                            planetSDF(p + e.yyx) - planetSDF(p - e.yyx)
+                        ));
+                    }
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = planetSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    float3 col = float3(0.02, 0.02, 0.05);
+                    if (t < 10.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 sunDir = normalize(float3(sin(u.time * 0.2), 0.3, cos(u.time * 0.2)));
+                        float diff = max(dot(n, sunDir), 0.0);
+                        float theta = atan2(p.z, p.x);
+                        float phi = asin(clamp(p.y / length(p), -1.0, 1.0));
+                        float h = fbm(float2(theta * 3.0, phi * 3.0));
+                        float3 land = mix(float3(0.1, 0.4, 0.1), float3(0.4, 0.3, 0.2), h);
+                        float3 water = float3(0.1, 0.2, 0.5);
+                        float3 surface = h > 0.45 ? land : water;
+                        float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+                        float3 atmosphere = float3(0.3, 0.6, 1.0) * fresnel * 0.8;
+                        col = surface * diff + float3(0.05, 0.05, 0.1) + atmosphere;
+                    }
+                    return float4(col, 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["fbm", "valueNoise", "diffuse", "sdSphere"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "Fresnel effect: edges glow brighter when the view is at a grazing angle"),
+                Hint(cost: 0, text: "The Fresnel term uses 1 - dot(normal, viewDir)"),
+                Hint(cost: 1, text: "Raise the Fresnel to a power (like 3) to concentrate it at the edges"),
+                Hint(cost: 2, text: """
+                    Common mistake - wrong sign on view direction:
+                    ```metal
+                    float fresnel = pow(1.0 - dot(n, rd), 3.0);  // ERROR
+                    ```
+                    The view direction should be negated: dot(n, -rd) because rd points away from camera.
+                    """),
+                Hint(cost: 3, text: "float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0); atmosphere = float3(0.3, 0.6, 1.0) * fresnel * 0.8;"),
+            ],
+            starterCode: """
+                // Procedural planet with terrain and atmosphere
+
+                float _hash(float2 p) {
+                    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                }
+
+                float noise(float2 p) {
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = _hash(i);
+                    float b = _hash(i + float2(1.0, 0.0));
+                    float c = _hash(i + float2(0.0, 1.0));
+                    float d = _hash(i + float2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+
+                float fbm(float2 p) {
+                    float v = 0.0; float a = 0.5;
+                    for (int i = 0; i < 5; i++) {
+                        v += a * noise(p);
+                        p *= 2.0; a *= 0.5;
+                    }
+                    return v;
+                }
+
+                float planetSDF(float3 p) {
+                    float theta = atan2(p.z, p.x);
+                    float phi = asin(clamp(p.y / length(p), -1.0, 1.0));
+                    float terrain = fbm(float2(theta * 3.0, phi * 3.0)) * 0.1;
+                    return length(p) - 1.0 - terrain;
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        planetSDF(p + e.xyy) - planetSDF(p - e.xyy),
+                        planetSDF(p + e.yxy) - planetSDF(p - e.yxy),
+                        planetSDF(p + e.yyx) - planetSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = planetSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+
+                    float3 col = float3(0.02, 0.02, 0.05);  // Space background
+
+                    if (t < 10.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+
+                        // Sun direction (orbiting)
+                        float3 sunDir = normalize(float3(sin(u.time * 0.2), 0.3, cos(u.time * 0.2)));
+                        float diff = max(dot(n, sunDir), 0.0);
+
+                        // Surface coloring based on height
+                        float theta = atan2(p.z, p.x);
+                        float phi = asin(clamp(p.y / length(p), -1.0, 1.0));
+                        float h = fbm(float2(theta * 3.0, phi * 3.0));
+
+                        float3 land = mix(float3(0.1, 0.4, 0.1), float3(0.4, 0.3, 0.2), h);
+                        float3 water = float3(0.1, 0.2, 0.5);
+                        float3 surface = h > 0.45 ? land : water;
+
+                        // TODO: Calculate Fresnel for atmospheric rim glow
+                        // fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0)
+                        float fresnel = 0.0;  // TODO: Calculate fresnel
+                        float3 atmosphere = float3(0.3, 0.6, 1.0) * fresnel * 0.8;
+
+                        col = surface * diff + float3(0.05, 0.05, 0.1) + atmosphere;
+                    }
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+                """
+        )
+    }
+
+    private func puzzle10_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 10, index: 2),
+            title: "Infinite Corridor",
+            subtitle: "Endless repetition",
+            description: """
+                Create an infinite sci-fi corridor using space folding, lighting, and camera movement.
+
+                This combines:
+                - Space folding to repeat the corridor infinitely
+                - Subtraction CSG for the corridor shape (box minus inner box)
+                - Lighting to create atmosphere
+                - Camera animation for the flying-through effect
+
+                Your goal: Implement the corridor SDF using box subtraction (carve the inner space from the outer walls).
+                """,
+            reference: .animation(
+                shader: """
+                    float3 foldSpace(float3 p, float period) {
+                        return fmod(p + period * 0.5, period) - period * 0.5;
+                    }
+                    float sdBox(float3 p, float3 b) {
+                        float3 d = abs(p) - b;
+                        return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                    }
+                    float corridorSDF(float3 p) {
+                        float3 folded = foldSpace(p, 4.0);
+                        float outer = sdBox(folded, float3(2.0, 2.0, 2.0));
+                        float inner = sdBox(folded, float3(1.5, 1.5, 2.1));
+                        return max(outer, -inner);
+                    }
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            corridorSDF(p + e.xyy) - corridorSDF(p - e.xyy),
+                            corridorSDF(p + e.yxy) - corridorSDF(p - e.yxy),
+                            corridorSDF(p + e.yyx) - corridorSDF(p - e.yyx)
+                        ));
+                    }
+                    float3 ro = float3(0.0, 0.0, u.time * 2.0);
+                    float bob = sin(u.time * 3.0) * 0.1;
+                    ro.y += bob;
+                    float3 rd = normalize(float3((uv - 0.5) * 0.8, 1.0));
+                    float sway = sin(u.time * 0.7) * 0.02;
+                    rd.x += sway;
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = corridorSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 50.0) break;
+                    }
+                    float3 col = float3(0.0);
+                    if (t < 50.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 folded = foldSpace(p, 4.0);
+                        float3 lightPos = float3(0.0, 1.8, 0.0);
+                        float3 toLight = lightPos - folded;
+                        float3 lightDir = normalize(toLight);
+                        float falloff = 1.0 / (1.0 + dot(toLight, toLight) * 0.1);
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float3 baseCol = float3(0.3, 0.35, 0.4);
+                        col = baseCol * diff * falloff * 2.0;
+                        col += float3(0.8, 0.5, 0.2) * falloff * 0.5;
+                        col = mix(col, float3(0.02, 0.02, 0.05), 1.0 - exp(-t * 0.03));
+                    }
+                    return float4(col, 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["foldSpace", "sdBox3d", "diffuse", "applyFog"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "A corridor is a box with a smaller box carved out of it"),
+                Hint(cost: 0, text: "CSG subtraction: max(d1, -d2) carves d2 from d1"),
+                Hint(cost: 1, text: "Make the inner box slightly longer in Z to ensure it carves through"),
+                Hint(cost: 2, text: """
+                    Common mistake - wrong operation:
+                    ```metal
+                    return min(outer, inner);  // ERROR: Union, not subtraction
+                    ```
+                    Use max(outer, -inner) for subtraction.
+                    """),
+                Hint(cost: 3, text: "return max(outer, -inner);"),
+            ],
+            starterCode: """
+                // Infinite sci-fi corridor
+
+                float3 foldSpace(float3 p, float period) {
+                    return fmod(p + period * 0.5, period) - period * 0.5;
+                }
+
+                float sdBox(float3 p, float3 b) {
+                    float3 d = abs(p) - b;
+                    return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                }
+
+                float corridorSDF(float3 p) {
+                    float3 folded = foldSpace(p, 4.0);
+
+                    // Outer walls
+                    float outer = sdBox(folded, float3(2.0, 2.0, 2.0));
+
+                    // Inner empty space (slightly longer to carve through)
+                    float inner = sdBox(folded, float3(1.5, 1.5, 2.1));
+
+                    // TODO: Use CSG subtraction to carve inner from outer
+                    // max(d1, -d2) subtracts d2 from d1
+                    return outer;  // Should be: max(outer, -inner)
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        corridorSDF(p + e.xyy) - corridorSDF(p - e.xyy),
+                        corridorSDF(p + e.yxy) - corridorSDF(p - e.yxy),
+                        corridorSDF(p + e.yyx) - corridorSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Camera flying through corridor
+                    float3 ro = float3(0.0, 0.0, u.time * 2.0);
+                    float bob = sin(u.time * 3.0) * 0.1;
+                    ro.y += bob;
+
+                    float3 rd = normalize(float3((uv - 0.5) * 0.8, 1.0));
+                    float sway = sin(u.time * 0.7) * 0.02;
+                    rd.x += sway;
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = corridorSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 50.0) break;
+                    }
+
+                    float3 col = float3(0.0);
+                    if (t < 50.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+
+                        // Local position for per-cell lighting
+                        float3 folded = foldSpace(p, 4.0);
+
+                        // Ceiling light
+                        float3 lightPos = float3(0.0, 1.8, 0.0);
+                        float3 toLight = lightPos - folded;
+                        float3 lightDir = normalize(toLight);
+                        float falloff = 1.0 / (1.0 + dot(toLight, toLight) * 0.1);
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float3 baseCol = float3(0.3, 0.35, 0.4);
+                        col = baseCol * diff * falloff * 2.0;
+
+                        // Warm light tint
+                        col += float3(0.8, 0.5, 0.2) * falloff * 0.5;
+
+                        // Distance fog
+                        col = mix(col, float3(0.02, 0.02, 0.05), 1.0 - exp(-t * 0.03));
+                    }
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                return max(outer, -inner);
+                """
+        )
+    }
+
+    private func puzzle10_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 10, index: 3),
+            title: "The Forge",
+            subtitle: "Your masterpiece",
+            description: """
+                Welcome to The Forge - the final challenge!
+
+                Create an animated scene of a glowing forge: a crucible of molten metal in a dark chamber. Combine everything you've learned:
+                - 3D SDFs for the crucible and environment
+                - Noise for the bubbling surface
+                - Emission for the glowing lava
+                - Raymarching with proper lighting
+
+                The crucible contains "molten metal" - animated noise that glows orange/yellow. The glow should illuminate the surrounding scene.
+
+                Your goal: Add the emission glow from the molten surface that illuminates nearby geometry.
+                """,
+            reference: .animation(
+                shader: """
+                    float _fHash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+                    float _fNoise(float2 p) {
+                        float2 i = floor(p); float2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        float a = _fHash(i); float b = _fHash(i + float2(1.0, 0.0));
+                        float c = _fHash(i + float2(0.0, 1.0)); float d = _fHash(i + float2(1.0, 1.0));
+                        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    }
+                    float sdCylinder(float3 p, float h, float r) {
+                        float2 d = abs(float2(length(p.xz), p.y)) - float2(r, h);
+                        return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+                    }
+                    float sdPlane(float3 p) { return p.y; }
+                    float moltenSurface(float3 p, float time) {
+                        float n = _fNoise(p.xz * 3.0 + time) * 0.1;
+                        return p.y - (-0.3 + n);
+                    }
+                    float sceneSDF(float3 p, float time) {
+                        float crucible = sdCylinder(p - float3(0.0, -0.5, 0.0), 0.5, 0.8);
+                        float inside = sdCylinder(p - float3(0.0, -0.3, 0.0), 0.5, 0.6);
+                        crucible = max(crucible, -inside);
+                        float molten = moltenSurface(p, time);
+                        float floor = sdPlane(p + float3(0.0, 1.0, 0.0));
+                        return min(min(crucible, floor), molten);
+                    }
+                    float3 calcNormal(float3 p, float time) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy, time) - sceneSDF(p - e.xyy, time),
+                            sceneSDF(p + e.yxy, time) - sceneSDF(p - e.yxy, time),
+                            sceneSDF(p + e.yyx, time) - sceneSDF(p - e.yyx, time)
+                        ));
+                    }
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 2.5, 1.0, cos(angle) * 2.5);
+                    float3 target = float3(0.0, -0.3, 0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                    float t = 0.0;
+                    for (int i = 0; i < 80; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p, u.time);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+                    float3 col = float3(0.02, 0.01, 0.01);
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p, u.time);
+                        float moltenDist = moltenSurface(p, u.time);
+                        bool isMolten = moltenDist < 0.01 && length(p.xz) < 0.6;
+                        if (isMolten) {
+                            float heat = _fNoise(p.xz * 5.0 + u.time * 2.0);
+                            col = mix(float3(1.0, 0.3, 0.0), float3(1.0, 0.8, 0.2), heat);
+                        } else {
+                            float3 moltenPos = float3(0.0, -0.3, 0.0);
+                            float3 toMolten = moltenPos - p;
+                            float dist = length(toMolten);
+                            float3 moltenDir = normalize(toMolten);
+                            float glow = max(dot(n, moltenDir), 0.0) / (1.0 + dist * dist * 2.0);
+                            col = float3(0.1, 0.08, 0.06) + float3(1.0, 0.4, 0.1) * glow * 3.0;
+                        }
+                    }
+                    return float4(col, 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["valueNoise", "diffuse", "sdCapsule", "sdBox3d", "applyFog"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "The molten metal illuminates nearby surfaces like a point light"),
+                Hint(cost: 0, text: "Use Lambert diffuse from the molten center with distance falloff"),
+                Hint(cost: 1, text: "Falloff: 1.0 / (1.0 + dist * dist * k) for inverse-square attenuation"),
+                Hint(cost: 2, text: """
+                    Common mistake - no falloff:
+                    ```metal
+                    float glow = max(dot(n, moltenDir), 0.0);  // ERROR: No distance falloff
+                    ```
+                    Need to divide by distance squared for realistic light falloff.
+                    """),
+                Hint(cost: 3, text: "float glow = max(dot(n, moltenDir), 0.0) / (1.0 + dist * dist * 2.0);"),
+            ],
+            starterCode: """
+                // The Forge: A glowing crucible of molten metal
+
+                float _hash(float2 p) {
+                    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                }
+
+                float noise(float2 p) {
+                    float2 i = floor(p); float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = _hash(i); float b = _hash(i + float2(1.0, 0.0));
+                    float c = _hash(i + float2(0.0, 1.0)); float d = _hash(i + float2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+
+                float sdCylinder(float3 p, float h, float r) {
+                    float2 d = abs(float2(length(p.xz), p.y)) - float2(r, h);
+                    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+                }
+
+                float sdPlane(float3 p) { return p.y; }
+
+                float moltenSurface(float3 p, float time) {
+                    float n = noise(p.xz * 3.0 + time) * 0.1;
+                    return p.y - (-0.3 + n);  // Bubbling surface
+                }
+
+                float sceneSDF(float3 p, float time) {
+                    // Crucible (cylinder with hollow inside)
+                    float crucible = sdCylinder(p - float3(0.0, -0.5, 0.0), 0.5, 0.8);
+                    float inside = sdCylinder(p - float3(0.0, -0.3, 0.0), 0.5, 0.6);
+                    crucible = max(crucible, -inside);
+
+                    // Molten metal surface
+                    float molten = moltenSurface(p, time);
+
+                    // Floor
+                    float floor = sdPlane(p + float3(0.0, 1.0, 0.0));
+
+                    return min(min(crucible, floor), molten);
+                }
+
+                float3 calcNormal(float3 p, float time) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy, time) - sceneSDF(p - e.xyy, time),
+                        sceneSDF(p + e.yxy, time) - sceneSDF(p - e.yxy, time),
+                        sceneSDF(p + e.yyx, time) - sceneSDF(p - e.yyx, time)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Orbiting camera
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 2.5, 1.0, cos(angle) * 2.5);
+                    float3 target = float3(0.0, -0.3, 0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 80; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p, u.time);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    float3 col = float3(0.02, 0.01, 0.01);  // Dark background
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p, u.time);
+
+                        // Check if we hit the molten surface
+                        float moltenDist = moltenSurface(p, u.time);
+                        bool isMolten = moltenDist < 0.01 && length(p.xz) < 0.6;
+
+                        if (isMolten) {
+                            // Glowing molten metal
+                            float heat = noise(p.xz * 5.0 + u.time * 2.0);
+                            col = mix(float3(1.0, 0.3, 0.0), float3(1.0, 0.8, 0.2), heat);
+                        } else {
+                            // Other surfaces - lit by molten glow
+                            float3 moltenPos = float3(0.0, -0.3, 0.0);
+                            float3 toMolten = moltenPos - p;
+                            float dist = length(toMolten);
+                            float3 moltenDir = normalize(toMolten);
+
+                            // TODO: Calculate glow with diffuse and distance falloff
+                            // glow = diffuse / (1.0 + dist^2 * k)
+                            float glow = 0.0;  // TODO: Add emission lighting
+
+                            col = float3(0.1, 0.08, 0.06) + float3(1.0, 0.4, 0.1) * glow * 3.0;
+                        }
+                    }
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float glow = max(dot(n, moltenDir), 0.0) / (1.0 + dist * dist * 2.0);
                 """
         )
     }
