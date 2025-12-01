@@ -484,6 +484,50 @@ final class PrimitiveLibrary {
             documentation: "Returns signed distance from point p to a capsule from a to b with radius r.",
             unlockedBy: PuzzleID(world: 6, index: 5)
         ))
+
+        // Raymarching
+        register(PrimitiveDefinition(
+            name: "getRayDirection",
+            category: .raymarching,
+            signature: "float3 getRayDirection(float2 uv, float fov)",
+            implementation: """
+                float3 getRayDirection(float2 uv, float fov) {
+                    return normalize(float3((uv - 0.5) * fov, -1.0));
+                }
+                """,
+            documentation: "Returns normalized ray direction for given UV and field of view.",
+            unlockedBy: PuzzleID(world: 7, index: 1)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "lookAt",
+            category: .raymarching,
+            signature: "float3x3 lookAt(float3 ro, float3 target)",
+            implementation: """
+                float3x3 lookAt(float3 ro, float3 target) {
+                    float3 f = normalize(target - ro);
+                    float3 r = normalize(cross(float3(0.0, 1.0, 0.0), f));
+                    float3 u = cross(f, r);
+                    return float3x3(r, u, f);
+                }
+                """,
+            documentation: "Creates a look-at camera matrix pointing from ro toward target.",
+            unlockedBy: PuzzleID(world: 7, index: 3)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "applyFog",
+            category: .raymarching,
+            signature: "float3 applyFog(float3 col, float3 fogCol, float dist, float density)",
+            implementation: """
+                float3 applyFog(float3 col, float3 fogCol, float dist, float density) {
+                    float fog = exp(-dist * density);
+                    return mix(fogCol, col, fog);
+                }
+                """,
+            documentation: "Applies exponential distance fog to a color.",
+            unlockedBy: PuzzleID(world: 7, index: 5)
+        ))
     }
 
     private func register(_ primitive: PrimitiveDefinition) {

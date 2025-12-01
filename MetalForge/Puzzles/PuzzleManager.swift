@@ -46,6 +46,7 @@ final class PuzzleManager {
             createWorld4(),
             createWorld5(),
             createWorld6(),
+            createWorld7(),
         ]
 
         // Build cache
@@ -3151,6 +3152,840 @@ final class PuzzleManager {
                 float sphere = length(p) - 0.6;
                 float cylinder = length(p.xz) - 0.25;
                 return max(sphere, -cylinder);
+                """
+        )
+    }
+
+    // MARK: - World 7: The Ray Marcher
+
+    private func createWorld7() -> World {
+        World(
+            number: 7,
+            title: "The Ray Marcher",
+            description: "Master the art of sphere tracing! Learn how rays are cast, how the marching loop works, and how to build complete 3D scenes from scratch.",
+            puzzles: [
+                puzzle7_1(),
+                puzzle7_2(),
+                puzzle7_3(),
+                puzzle7_4(),
+                puzzle7_5(),
+                puzzle7_6(),
+            ]
+        )
+    }
+
+    private func puzzle7_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 1),
+            title: "First Ray",
+            subtitle: "Setting up ray origin and direction",
+            description: """
+                Time to understand what's been happening behind the scenes! **Raymarching** (or sphere tracing) renders 3D scenes by shooting rays from a camera.
+
+                Every ray needs:
+                - **Origin (ro)**: Where the camera is located
+                - **Direction (rd)**: Which way the ray points
+
+                ```
+                float3 ro = float3(0.0, 0.0, 3.0);  // Camera at z=3
+                float3 rd = normalize(float3(uv - 0.5, -1.0));  // Look toward -z
+                ```
+
+                The ray direction is derived from UV coordinates:
+                - `uv - 0.5` centers the screen
+                - The z component (-1.0) points into the scene
+                - [`normalize()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=85) makes it a unit vector
+
+                Visualize the ray direction as a color! Red = x, Green = y, Blue = -z (we flip z so forward is blue).
+                """,
+            reference: .animation(
+                shader: """
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float3 col = rd * 0.5 + 0.5;
+                    col.z = -rd.z * 0.5 + 0.5;
+                    return float4(col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .pixelPerfect,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .raymarching,
+                functionName: "getRayDirection",
+                signature: "float3 getRayDirection(float2 uv, float fov)",
+                implementation: "return normalize(float3((uv - 0.5) * fov, -1.0));",
+                documentation: "Returns normalized ray direction for given UV and field of view."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Ray direction comes from the UV: center it with (uv - 0.5)"),
+                Hint(cost: 0, text: "normalize() makes the direction a unit vector"),
+                Hint(cost: 1, text: "Visualize: col = rd * 0.5 + 0.5 (but flip z for the blue channel)"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = float3(uv - 0.5, -1.0);  // ERROR: Missing normalize()
+                    float3 col = rd * 0.5 + 0.5;
+                    col.z = -rd.z * 0.5 + 0.5;
+                    return float4(col, 1.0);
+                    """),
+                Hint(cost: 3, text: "float3 rd = normalize(float3(uv - 0.5, -1.0)); float3 col = rd * 0.5 + 0.5; col.z = -rd.z * 0.5 + 0.5;"),
+            ],
+            starterCode: """
+                // Visualize ray directions
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Camera position (not used yet, just for setup)
+                    float3 ro = float3(0.0, 0.0, 3.0);
+
+                    // TODO: Calculate ray direction
+                    // Step 1: float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float3 rd = float3(0.0, 0.0, -1.0);  // Replace with proper calculation
+
+                    // Visualize the direction as color
+                    // Map from [-1,1] to [0,1] for display
+                    float3 col = rd * 0.5 + 0.5;
+                    col.z = -rd.z * 0.5 + 0.5;  // Flip z so "forward" is blue
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float3 ro = float3(0.0, 0.0, 3.0);
+                float3 rd = normalize(float3(uv - 0.5, -1.0));
+                float3 col = rd * 0.5 + 0.5;
+                col.z = -rd.z * 0.5 + 0.5;
+                return float4(col, 1.0);
+                """
+        )
+    }
+
+    private func puzzle7_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 2),
+            title: "March Forward",
+            subtitle: "The sphere tracing loop",
+            description: """
+                Now for the magic: **sphere tracing**!
+
+                The key insight: an SDF tells us the safe distance to march. At any point, we can step forward by the SDF value without missing any surfaces.
+
+                ```
+                float t = 0.0;  // Distance traveled along ray
+                for (int i = 0; i < 64; i++) {
+                    float3 p = ro + rd * t;     // Current position
+                    float d = sceneSDF(p);      // Distance to nearest surface
+                    if (d < 0.001) break;       // Hit something!
+                    t += d;                     // March forward
+                    if (t > 20.0) break;        // Too far, stop
+                }
+                ```
+
+                Write the complete raymarch loop! Color the sphere white, background black.
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        return length(p) - 0.8;
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    float col = t < 20.0 ? 1.0 : 0.0;
+                    return float4(col, col, col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .raymarching,
+                functionName: "raymarch",
+                signature: "float raymarch(float3 ro, float3 rd, int maxSteps, float maxDist)",
+                implementation: "float t = 0.0; for (int i = 0; i < maxSteps; i++) { float d = sceneSDF(ro + rd * t); if (d < 0.001) return t; t += d; if (t > maxDist) break; } return -1.0;",
+                documentation: "Raymarches the scene, returns hit distance or -1.0 if no hit."
+            ),
+            hints: [
+                Hint(cost: 0, text: "The raymarch loop: calculate position (ro + rd * t), get SDF, step forward by SDF value"),
+                Hint(cost: 0, text: "Stop when d < 0.001 (hit) or t > 20.0 (miss)"),
+                Hint(cost: 1, text: "After the loop, t < 20.0 means we hit something"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += 1.0;  // ERROR: Should be t += d (step by SDF value, not constant!)
+                        if (t > 20.0) break;
+                    }
+                    """),
+                Hint(cost: 3, text: "t += d; (step by SDF value) ... float col = t < 20.0 ? 1.0 : 0.0;"),
+            ],
+            starterCode: """
+                // Scene: sphere at origin
+                float sceneSDF(float3 p) {
+                    return length(p) - 0.8;
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Ray setup
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+
+                    // TODO: Implement raymarch loop
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+
+                        // TODO: Check for hit (d < 0.001)
+
+                        // TODO: Step forward by d
+
+                        // TODO: Check for miss (t > 20.0)
+                    }
+
+                    // Color based on hit/miss
+                    float col = 0.0;  // TODO: Set to 1.0 if hit (t < 20.0)
+
+                    return float4(col, col, col, 1.0);
+                }
+                """,
+            solution: """
+                float t = 0.0;
+                for (int i = 0; i < 64; i++) {
+                    float3 p = ro + rd * t;
+                    float d = sceneSDF(p);
+                    if (d < 0.001) break;
+                    t += d;
+                    if (t > 20.0) break;
+                }
+                float col = t < 20.0 ? 1.0 : 0.0;
+                return float4(col, col, col, 1.0);
+                """
+        )
+    }
+
+    private func puzzle7_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 3),
+            title: "Camera Control",
+            subtitle: "The look-at matrix",
+            description: """
+                So far our camera points straight down -Z. Let's aim it anywhere with a **look-at matrix**!
+
+                ```
+                float3 lookAt(float3 ro, float3 target, float2 uv) {
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0,1,0), forward));
+                    float3 up = cross(forward, right);
+                    return normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                }
+                ```
+
+                The [`cross()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=85) product gives us perpendicular vectors:
+                - **forward**: direction from camera to target
+                - **right**: perpendicular to forward and world up
+                - **up**: perpendicular to forward and right
+
+                Create a scene where the camera orbits around a sphere, always looking at the center!
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        return length(p) - 0.8;
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    // Orbit camera
+                    float angle = u.time * 0.5;
+                    float3 ro = float3(sin(angle) * 3.0, 1.0, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+
+                    // Look-at camera
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+                        return float4(diff, diff, diff, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .raymarching,
+                functionName: "lookAt",
+                signature: "float3x3 lookAt(float3 ro, float3 target)",
+                implementation: "float3 f = normalize(target - ro); float3 r = normalize(cross(float3(0,1,0), f)); float3 u = cross(f, r); return float3x3(r, u, f);",
+                documentation: "Creates a look-at camera matrix pointing from ro toward target."
+            ),
+            hints: [
+                Hint(cost: 0, text: "forward = normalize(target - ro) points the camera at the target"),
+                Hint(cost: 0, text: "cross(up, forward) gives right; cross(forward, right) gives the camera's up"),
+                Hint(cost: 1, text: "rd = normalize(right * (uv.x-0.5) + up * (uv.y-0.5) + forward)"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 forward = normalize(target - ro);
+                    float3 right = cross(float3(0.0, 1.0, 0.0), forward);  // ERROR: Missing normalize()
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                    """),
+                Hint(cost: 3, text: "float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));"),
+            ],
+            starterCode: """
+                float sceneSDF(float3 p) {
+                    return length(p) - 0.8;
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Orbiting camera position
+                    float angle = u.time * 0.5;
+                    float3 ro = float3(sin(angle) * 3.0, 1.0, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+
+                    // TODO: Build look-at camera
+                    // Step 1: forward = normalize(target - ro)
+                    // Step 2: right = normalize(cross(float3(0,1,0), forward))
+                    // Step 3: up = cross(forward, right)
+                    // Step 4: rd = normalize(right*(uv.x-0.5) + up*(uv.y-0.5) + forward)
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));  // Replace with look-at
+
+                    // Raymarch
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    // Shade
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+                        return float4(diff, diff, diff, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                float3 forward = normalize(target - ro);
+                float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                float3 up = cross(forward, right);
+                float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                """
+        )
+    }
+
+    private func puzzle7_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 4),
+            title: "Surface Normal",
+            subtitle: "Gradient-based normals",
+            description: """
+                Lighting needs **surface normals** - vectors perpendicular to the surface. With SDFs, we compute them using the **gradient**!
+
+                The gradient points in the direction of steepest increase. For an SDF, that's away from the surface - exactly what we need.
+
+                ```
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+                ```
+
+                We sample the SDF at 6 points around p and compute the difference. The pattern `e.xyy` means `(0.001, 0, 0)`.
+
+                Implement the normal calculation and visualize it as color!
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p) - 0.8;
+                        float3 bp = abs(p) - float3(0.4);
+                        float box = length(max(bp, 0.0)) + min(max(bp.x, max(bp.y, bp.z)), 0.0);
+                        return min(sphere, box);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 0.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        return float4(n * 0.5 + 0.5, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .raymarching,
+                functionName: "calcNormal",
+                signature: "float3 calcNormal(float3 p)",
+                implementation: "float2 e = float2(0.001, 0.0); return normalize(float3(sceneSDF(p+e.xyy)-sceneSDF(p-e.xyy), sceneSDF(p+e.yxy)-sceneSDF(p-e.yxy), sceneSDF(p+e.yyx)-sceneSDF(p-e.yyx)));",
+                documentation: "Calculates surface normal at point p using gradient of SDF."
+            ),
+            hints: [
+                Hint(cost: 0, text: "e.xyy = (0.001, 0, 0), e.yxy = (0, 0.001, 0), e.yyx = (0, 0, 0.001)"),
+                Hint(cost: 0, text: "Sample SDF at p+e and p-e for each axis, subtract to get gradient"),
+                Hint(cost: 1, text: "Visualize normal as color: n * 0.5 + 0.5 maps [-1,1] to [0,1]"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return float3(  // ERROR: Missing normalize()
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        );
+                    }
+                    """),
+                Hint(cost: 3, text: "return normalize(float3(sceneSDF(p+e.xyy)-sceneSDF(p-e.xyy), ...));"),
+            ],
+            starterCode: """
+                // Scene: sphere + box union
+                float sceneSDF(float3 p) {
+                    float sphere = length(p) - 0.8;
+                    float3 bp = abs(p) - float3(0.4);
+                    float box = length(max(bp, 0.0)) + min(max(bp.x, max(bp.y, bp.z)), 0.0);
+                    return min(sphere, box);
+                }
+
+                // TODO: Implement calcNormal using gradient
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+
+                    // TODO: Return normalized gradient
+                    // Sample SDF at p+e.xyy, p-e.xyy, etc.
+                    return float3(0.0, 1.0, 0.0);  // Replace with gradient calculation
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 0.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        // Visualize normal as color
+                        return float4(n * 0.5 + 0.5, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                return normalize(float3(
+                    sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                    sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                    sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                ));
+                """
+        )
+    }
+
+    private func puzzle7_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 5),
+            title: "Depth Fog",
+            subtitle: "Atmospheric effects",
+            description: """
+                Add **atmospheric fog** that fades objects based on distance! This creates depth and hides the far clipping plane.
+
+                The simplest fog formula uses exponential falloff:
+
+                ```
+                float fog = exp(-t * density);           // Exponential fog
+                color = mix(fogColor, color, fog);       // Blend with fog color
+                ```
+
+                A higher `density` means thicker fog. The [`exp()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) function ensures smooth falloff.
+
+                Add fog to the scene with density 0.15 and a blue-gray fog color (0.5, 0.6, 0.7).
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.0, 0.0)) - 0.8;
+                        float sphere2 = length(p - float3(2.0, 0.0, -2.0)) - 0.6;
+                        float sphere3 = length(p - float3(-1.5, 0.0, -3.0)) - 0.5;
+                        float plane = p.y + 0.8;
+                        return min(min(min(sphere, sphere2), sphere3), plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 1.0, 4.0);
+                    float3 target = float3(0.0, 0.0, -1.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    float3 fogColor = float3(0.5, 0.6, 0.7);
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+                        float3 col = float3(0.9, 0.8, 0.7) * diff;
+                        float fog = exp(-t * 0.15);
+                        col = mix(fogColor, col, fog);
+                        return float4(col, 1.0);
+                    }
+                    return float4(fogColor, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .raymarching,
+                functionName: "applyFog",
+                signature: "float3 applyFog(float3 col, float3 fogCol, float dist, float density)",
+                implementation: "float fog = exp(-dist * density); return mix(fogCol, col, fog);",
+                documentation: "Applies exponential distance fog to a color."
+            ),
+            hints: [
+                Hint(cost: 0, text: "exp(-t * density) gives fog factor: 1 at t=0, approaching 0 as t increases"),
+                Hint(cost: 0, text: "mix(fogColor, objectColor, fog) blends based on fog factor"),
+                Hint(cost: 1, text: "Also set background color to fogColor so distant objects blend seamlessly"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float fog = t * 0.15;  // ERROR: Should be exp(-t * 0.15)
+                    col = mix(col, fogColor, fog);  // ERROR: Arguments in wrong order - should be mix(fogColor, col, fog)
+                    """),
+                Hint(cost: 3, text: "float fog = exp(-t * 0.15); col = mix(fogColor, col, fog);"),
+            ],
+            starterCode: """
+                float sceneSDF(float3 p) {
+                    float sphere = length(p - float3(0.0, 0.0, 0.0)) - 0.8;
+                    float sphere2 = length(p - float3(2.0, 0.0, -2.0)) - 0.6;
+                    float sphere3 = length(p - float3(-1.5, 0.0, -3.0)) - 0.5;
+                    float plane = p.y + 0.8;
+                    return min(min(min(sphere, sphere2), sphere3), plane);
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float3 ro = float3(0.0, 1.0, 4.0);
+                    float3 target = float3(0.0, 0.0, -1.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    float3 fogColor = float3(0.5, 0.6, 0.7);
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+                        float3 col = float3(0.9, 0.8, 0.7) * diff;
+
+                        // TODO: Apply fog
+                        // Step 1: float fog = exp(-t * 0.15);
+                        // Step 2: col = mix(fogColor, col, fog);
+
+                        return float4(col, 1.0);
+                    }
+                    return float4(fogColor, 1.0);  // Background matches fog color
+                }
+                """,
+            solution: """
+                float fog = exp(-t * 0.15);
+                col = mix(fogColor, col, fog);
+                """
+        )
+    }
+
+    private func puzzle7_6() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 7, index: 6),
+            title: "Infinite Floor",
+            subtitle: "A complete scene",
+            description: """
+                Let's build a complete scene! Combine everything:
+                - Orbiting camera with look-at
+                - Multiple objects
+                - Surface normals for lighting
+                - Depth fog
+
+                Create a scene with:
+                - A sphere at the origin (radius 0.8)
+                - An infinite floor at y = -0.8
+                - A checkerboard pattern on the floor
+
+                For the checkerboard, use position to determine color:
+                ```
+                float check = step(0.5, fract(floor(p.x) + floor(p.z)) * 0.5) * 0.5 + 0.5;
+                ```
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p) - 0.8;
+                        float plane = p.y + 0.8;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 4.0, 2.0, cos(angle) * 4.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 30.0) break;
+                    }
+
+                    float3 fogColor = float3(0.5, 0.6, 0.7);
+
+                    if (t < 30.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+
+                        float3 col;
+                        if (p.y < -0.79) {
+                            float check = step(0.5, fract((floor(p.x) + floor(p.z)) * 0.5)) * 0.5 + 0.5;
+                            col = float3(check) * diff;
+                        } else {
+                            col = float3(0.9, 0.6, 0.4) * diff;
+                        }
+
+                        float fog = exp(-t * 0.05);
+                        col = mix(fogColor, col, fog);
+                        return float4(col, 1.0);
+                    }
+                    return float4(fogColor, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.95), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "Check if p.y is near the floor (< -0.79) to apply checkerboard"),
+                Hint(cost: 0, text: "Use floor(p.x) + floor(p.z) to create the checker pattern"),
+                Hint(cost: 1, text: "float check = step(0.5, fract((floor(p.x) + floor(p.z)) * 0.5)) * 0.5 + 0.5;"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    if (p.y < -0.79) {
+                        float check = fract((p.x + p.z) * 0.5);  // ERROR: Should use floor(p.x) + floor(p.z) for crisp squares
+                        col = float3(check) * diff;
+                    }
+                    """),
+                Hint(cost: 3, text: "float check = step(0.5, fract((floor(p.x) + floor(p.z)) * 0.5)) * 0.5 + 0.5; col = float3(check) * diff;"),
+            ],
+            starterCode: """
+                float sceneSDF(float3 p) {
+                    float sphere = length(p) - 0.8;
+                    float plane = p.y + 0.8;
+                    return min(sphere, plane);
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Orbiting camera
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 4.0, 2.0, cos(angle) * 4.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    // Raymarch
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 30.0) break;
+                    }
+
+                    float3 fogColor = float3(0.5, 0.6, 0.7);
+
+                    if (t < 30.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0) * 0.8 + 0.2;
+
+                        float3 col;
+                        // TODO: If on floor (p.y < -0.79), apply checkerboard
+                        // Else apply orange sphere color
+                        if (p.y < -0.79) {
+                            // TODO: Checkerboard pattern
+                            col = float3(0.5) * diff;  // Replace with checker
+                        } else {
+                            col = float3(0.9, 0.6, 0.4) * diff;
+                        }
+
+                        // Fog
+                        float fog = exp(-t * 0.05);
+                        col = mix(fogColor, col, fog);
+                        return float4(col, 1.0);
+                    }
+                    return float4(fogColor, 1.0);
+                }
+                """,
+            solution: """
+                float check = step(0.5, fract((floor(p.x) + floor(p.z)) * 0.5)) * 0.5 + 0.5;
+                col = float3(check) * diff;
                 """
         )
     }
