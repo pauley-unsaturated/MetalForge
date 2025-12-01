@@ -623,6 +623,76 @@ final class PrimitiveLibrary {
             documentation: "Raymarches toward light for soft shadows with penumbra. k controls softness. Requires sceneSDF function.",
             unlockedBy: PuzzleID(world: 8, index: 5)
         ))
+
+        // Advanced
+        register(PrimitiveDefinition(
+            name: "domainWarp",
+            category: .advanced,
+            signature: "float2 domainWarp(float2 p, float scale, float time)",
+            implementation: """
+                float _dwHash(float2 p) {
+                    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                }
+                float _dwNoise(float2 p) {
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = _dwHash(i);
+                    float b = _dwHash(i + float2(1.0, 0.0));
+                    float c = _dwHash(i + float2(0.0, 1.0));
+                    float d = _dwHash(i + float2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+                float2 domainWarp(float2 p, float scale, float time) {
+                    float nx = _dwNoise(p + float2(0.0, 1.0) + time * 0.1);
+                    float ny = _dwNoise(p + float2(5.2, 1.3) + time * 0.1);
+                    return p + float2(nx, ny) * scale;
+                }
+                """,
+            documentation: "Warps 2D coordinates using noise offset. Creates organic, flowing distortions.",
+            unlockedBy: PuzzleID(world: 9, index: 1)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "foldSpace",
+            category: .advanced,
+            signature: "float3 foldSpace(float3 p, float period)",
+            implementation: """
+                float3 foldSpace(float3 p, float period) {
+                    return fmod(p + period * 0.5, period) - period * 0.5;
+                }
+                """,
+            documentation: "Folds 3D space into repeating cells of the given period. Centers each cell at origin.",
+            unlockedBy: PuzzleID(world: 9, index: 2)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "mandelbulbSDF",
+            category: .advanced,
+            signature: "float mandelbulbSDF(float3 pos, float power)",
+            implementation: """
+                float mandelbulbSDF(float3 pos, float power) {
+                    float3 z = pos;
+                    float dr = 1.0;
+                    float r = 0.0;
+                    for (int i = 0; i < 8; i++) {
+                        r = length(z);
+                        if (r > 2.0) break;
+                        float theta = acos(z.z / r);
+                        float phi = atan2(z.y, z.x);
+                        dr = pow(r, power - 1.0) * power * dr + 1.0;
+                        float zr = pow(r, power);
+                        theta = theta * power;
+                        phi = phi * power;
+                        z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                        z += pos;
+                    }
+                    return 0.5 * log(r) * r / dr;
+                }
+                """,
+            documentation: "Returns signed distance to a Mandelbulb fractal. Power of 8 gives the classic shape.",
+            unlockedBy: PuzzleID(world: 9, index: 3)
+        ))
     }
 
     private func register(_ primitive: PrimitiveDefinition) {

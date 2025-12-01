@@ -48,6 +48,7 @@ final class PuzzleManager {
             createWorld6(),
             createWorld7(),
             createWorld8(),
+            createWorld9(),
         ]
 
         // Build cache
@@ -4815,6 +4816,492 @@ final class PuzzleManager {
                 """,
             solution: """
                 result = min(result, k * d / t);
+                """
+        )
+    }
+
+    // MARK: - World 9: Advanced Techniques
+
+    private func createWorld9() -> World {
+        World(
+            number: 9,
+            title: "Advanced Techniques",
+            description: "Master advanced shader techniques: domain warping, space folding, and fractals",
+            puzzles: [
+                puzzle9_1(),
+                puzzle9_2(),
+                puzzle9_3(),
+            ]
+        )
+    }
+
+    private func puzzle9_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 9, index: 1),
+            title: "Domain Warp",
+            subtitle: "Bend space with noise",
+            description: """
+                Domain warping uses one noise function to offset the input coordinates of another, creating organic, flowing distortions.
+
+                The technique involves sampling noise at a point, then using that value to offset the original coordinates before sampling again. This creates complex, natural-looking patterns.
+
+                See Inigo Quilez's article on [Domain Warping](https://iquilezles.org/articles/warp/) for the theory behind this technique.
+
+                Your goal: Create a warped noise pattern where the domain is offset by the noise itself, producing swirling, cloud-like forms.
+                """,
+            reference: .animation(
+                shader: """
+                    float _hash91(float2 p) {
+                        return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                    }
+                    float _noise91(float2 p) {
+                        float2 i = floor(p);
+                        float2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        float a = _hash91(i);
+                        float b = _hash91(i + float2(1.0, 0.0));
+                        float c = _hash91(i + float2(0.0, 1.0));
+                        float d = _hash91(i + float2(1.0, 1.0));
+                        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    }
+                    float2 warpDomain(float2 p, float time) {
+                        float nx = _noise91(p + float2(0.0, 1.0) + time * 0.1);
+                        float ny = _noise91(p + float2(5.2, 1.3) + time * 0.1);
+                        return p + float2(nx, ny) * 2.0;
+                    }
+                    float2 uv2 = uv * 4.0;
+                    float2 warped = warpDomain(uv2, u.time);
+                    float n = _noise91(warped);
+                    return float4(float3(n), 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["valueNoise", "fbm", "hash"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .advanced,
+                functionName: "domainWarp",
+                signature: "float2 domainWarp(float2 p, float scale, float time)",
+                implementation: """
+                    float _dwHash(float2 p) {
+                        return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                    }
+                    float _dwNoise(float2 p) {
+                        float2 i = floor(p);
+                        float2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        float a = _dwHash(i);
+                        float b = _dwHash(i + float2(1.0, 0.0));
+                        float c = _dwHash(i + float2(0.0, 1.0));
+                        float d = _dwHash(i + float2(1.0, 1.0));
+                        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    }
+                    float2 domainWarp(float2 p, float scale, float time) {
+                        float nx = _dwNoise(p + float2(0.0, 1.0) + time * 0.1);
+                        float ny = _dwNoise(p + float2(5.2, 1.3) + time * 0.1);
+                        return p + float2(nx, ny) * scale;
+                    }
+                    """,
+                documentation: "Warps 2D coordinates using noise offset. Creates organic, flowing distortions."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Domain warping offsets coordinates using noise before sampling again"),
+                Hint(cost: 0, text: "Sample noise twice with different offsets to get x and y warp amounts"),
+                Hint(cost: 1, text: "Use different seed offsets like float2(0.0, 1.0) and float2(5.2, 1.3) for x and y"),
+                Hint(cost: 2, text: """
+                    Common mistake - warping too little:
+                    ```metal
+                    return p + float2(nx, ny) * 0.1;  // ERROR: Too subtle
+                    ```
+                    Use a larger scale like 2.0 for visible warping.
+                    """),
+                Hint(cost: 3, text: "return p + float2(nx, ny) * 2.0;"),
+            ],
+            starterCode: """
+                // Domain warping: offset coordinates by noise to create organic patterns
+
+                float _hash(float2 p) {
+                    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                }
+
+                float noise(float2 p) {
+                    float2 i = floor(p);
+                    float2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = _hash(i);
+                    float b = _hash(i + float2(1.0, 0.0));
+                    float c = _hash(i + float2(0.0, 1.0));
+                    float d = _hash(i + float2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+
+                // TODO: Implement domain warping
+                // Sample noise at offset positions to get warp amounts
+                float2 warpDomain(float2 p, float time) {
+                    // Sample noise with different offsets for x and y
+                    float nx = noise(p + float2(0.0, 1.0) + time * 0.1);
+                    float ny = noise(p + float2(5.2, 1.3) + time * 0.1);
+
+                    // TODO: Add the warp offset to p
+                    return p;  // Should be: p + float2(nx, ny) * scale
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv * 4.0;
+                    float2 warped = warpDomain(p, u.time);
+                    float n = noise(warped);
+                    return float4(float3(n), 1.0);
+                }
+                """,
+            solution: """
+                return p + float2(nx, ny) * 2.0;
+                """
+        )
+    }
+
+    private func puzzle9_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 9, index: 2),
+            title: "Space Folding",
+            subtitle: "Infinite repetition through modular space",
+            description: """
+                Space folding uses modular arithmetic to create infinite repetition of geometry. Instead of placing many objects, you fold space so one object appears everywhere.
+
+                The key insight: `fract(p)` repeats coordinates in a 0-1 range. Combined with `abs()` for mirroring, you can create kaleidoscopic effects.
+
+                For SDFs, use `fmod(p + offset, period) - offset` to center the repeated cell. This keeps the SDF distances correct.
+
+                See the technique explained in [Domain Repetition](https://iquilezles.org/articles/distfunctions/).
+
+                Your goal: Create an infinite grid of spheres using space folding.
+                """,
+            reference: .animation(
+                shader: """
+                    float3 foldSpace(float3 p, float period) {
+                        return fmod(p + period * 0.5, period) - period * 0.5;
+                    }
+                    float sdSphere(float3 p, float r) { return length(p) - r; }
+                    float sceneSDF(float3 p) {
+                        float3 folded = foldSpace(p, 2.0);
+                        return sdSphere(folded, 0.5);
+                    }
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+                    float3 ro = float3(sin(u.time * 0.3) * 5.0, 2.0, cos(u.time * 0.3) * 5.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 50.0) break;
+                    }
+                    if (t < 50.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float diff = max(dot(n, normalize(float3(1.0, 1.0, 1.0))), 0.0);
+                        return float4(float3(0.8, 0.5, 0.3) * (diff * 0.8 + 0.2), 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdSphere", "sdBox3d", "lookAt", "getRayDirection"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .advanced,
+                functionName: "foldSpace",
+                signature: "float3 foldSpace(float3 p, float period)",
+                implementation: """
+                    float3 foldSpace(float3 p, float period) {
+                        return fmod(p + period * 0.5, period) - period * 0.5;
+                    }
+                    """,
+                documentation: "Folds 3D space into repeating cells of the given period. Centers each cell at origin."
+            ),
+            hints: [
+                Hint(cost: 0, text: "fmod(x, period) gives the remainder, creating repetition"),
+                Hint(cost: 0, text: "To center the object in each cell, offset before and after fmod"),
+                Hint(cost: 1, text: "The pattern is: fmod(p + half, period) - half"),
+                Hint(cost: 2, text: """
+                    Common mistake - incorrect centering:
+                    ```metal
+                    return fmod(p, period);  // ERROR: Objects at cell edges
+                    ```
+                    Need to offset to center: fmod(p + period * 0.5, period) - period * 0.5
+                    """),
+                Hint(cost: 3, text: "return fmod(p + period * 0.5, period) - period * 0.5;"),
+            ],
+            starterCode: """
+                // Space folding: create infinite repetition of geometry
+
+                float sdSphere(float3 p, float r) {
+                    return length(p) - r;
+                }
+
+                // TODO: Implement space folding
+                // Use fmod to repeat space, with proper centering
+                float3 foldSpace(float3 p, float period) {
+                    // Offset to center, apply fmod, offset back
+                    // return fmod(p + period * 0.5, period) - period * 0.5;
+                    return p;  // TODO: Apply space folding
+                }
+
+                float sceneSDF(float3 p) {
+                    float3 folded = foldSpace(p, 2.0);
+                    return sdSphere(folded, 0.5);
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float3 ro = float3(sin(u.time * 0.3) * 5.0, 2.0, cos(u.time * 0.3) * 5.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 50.0) break;
+                    }
+
+                    if (t < 50.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float diff = max(dot(n, normalize(float3(1.0, 1.0, 1.0))), 0.0);
+                        return float4(float3(0.8, 0.5, 0.3) * (diff * 0.8 + 0.2), 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                return fmod(p + period * 0.5, period) - period * 0.5;
+                """
+        )
+    }
+
+    private func puzzle9_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 9, index: 3),
+            title: "The Mandelbulb",
+            subtitle: "Your first fractal",
+            description: """
+                The Mandelbulb is a 3D fractal that extends the Mandelbrot set into three dimensions using a triplex algebra.
+
+                The core formula iteratively applies: z = z^n + c, where z and c are 3D points and the power operation uses spherical coordinates.
+
+                Each iteration: convert to spherical (r, theta, phi), raise r to power n, multiply angles by n, convert back to Cartesian, then add the original point.
+
+                The distance estimate uses: 0.5 * ln(r) * r / dr, where dr tracks the derivative.
+
+                See [Distance Estimated 3D Fractals](https://iquilezles.org/articles/mandelbulb/) for the full derivation.
+
+                Your goal: Implement the power formula that defines the Mandelbulb's shape.
+                """,
+            reference: .animation(
+                shader: """
+                    float mandelbulbSDF(float3 pos, float power) {
+                        float3 z = pos;
+                        float dr = 1.0;
+                        float r = 0.0;
+                        for (int i = 0; i < 8; i++) {
+                            r = length(z);
+                            if (r > 2.0) break;
+                            float theta = acos(z.z / r);
+                            float phi = atan2(z.y, z.x);
+                            dr = pow(r, power - 1.0) * power * dr + 1.0;
+                            float zr = pow(r, power);
+                            theta = theta * power;
+                            phi = phi * power;
+                            z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                            z += pos;
+                        }
+                        return 0.5 * log(r) * r / dr;
+                    }
+                    float sceneSDF(float3 p) { return mandelbulbSDF(p, 8.0); }
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+                    float angle = u.time * 0.2;
+                    float3 ro = float3(sin(angle) * 2.5, 0.5, cos(angle) * 2.5);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+                    float t = 0.0;
+                    for (int i = 0; i < 100; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.0005) break;
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    if (t < 10.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float spec = pow(max(dot(reflect(-lightDir, n), -rd), 0.0), 32.0);
+                        float3 col = float3(0.6, 0.3, 0.8) * (diff * 0.7 + 0.3) + float3(1.0) * spec * 0.3;
+                        col *= exp(-t * 0.15);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.05, 0.05, 0.1, 1.0);
+                    """,
+                duration: 10
+            ),
+            verification: .standard,
+            availablePrimitives: ["diffuse", "specular", "lookAt", "getRayDirection"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .advanced,
+                functionName: "mandelbulbSDF",
+                signature: "float mandelbulbSDF(float3 pos, float power)",
+                implementation: """
+                    float mandelbulbSDF(float3 pos, float power) {
+                        float3 z = pos;
+                        float dr = 1.0;
+                        float r = 0.0;
+                        for (int i = 0; i < 8; i++) {
+                            r = length(z);
+                            if (r > 2.0) break;
+                            float theta = acos(z.z / r);
+                            float phi = atan2(z.y, z.x);
+                            dr = pow(r, power - 1.0) * power * dr + 1.0;
+                            float zr = pow(r, power);
+                            theta = theta * power;
+                            phi = phi * power;
+                            z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                            z += pos;
+                        }
+                        return 0.5 * log(r) * r / dr;
+                    }
+                    """,
+                documentation: "Returns signed distance to a Mandelbulb fractal. Power of 8 gives the classic shape."
+            ),
+            hints: [
+                Hint(cost: 0, text: "The Mandelbulb formula uses spherical coordinates: (r, theta, phi)"),
+                Hint(cost: 0, text: "theta = acos(z.z / r) and phi = atan2(z.y, z.x)"),
+                Hint(cost: 1, text: "The power operation: multiply angles by power, raise r to power"),
+                Hint(cost: 2, text: """
+                    Common mistake - forgetting to add the original position:
+                    ```metal
+                    z = zr * float3(sin(theta) * cos(phi), ...);
+                    // ERROR: Missing z += pos;
+                    ```
+                    The iteration must add the original position after the power operation.
+                    """),
+                Hint(cost: 3, text: "z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)); z += pos;"),
+            ],
+            starterCode: """
+                // The Mandelbulb: a 3D extension of the Mandelbrot set
+
+                float mandelbulbSDF(float3 pos, float power) {
+                    float3 z = pos;
+                    float dr = 1.0;  // Running derivative
+                    float r = 0.0;
+
+                    for (int i = 0; i < 8; i++) {
+                        r = length(z);
+                        if (r > 2.0) break;
+
+                        // Convert to spherical coordinates
+                        float theta = acos(z.z / r);
+                        float phi = atan2(z.y, z.x);
+
+                        // Track the derivative
+                        dr = pow(r, power - 1.0) * power * dr + 1.0;
+
+                        // Apply the power in spherical coords
+                        float zr = pow(r, power);
+                        theta = theta * power;
+                        phi = phi * power;
+
+                        // TODO: Convert back to Cartesian and add original position
+                        // z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                        // z += pos;
+                    }
+
+                    // Distance estimate
+                    return 0.5 * log(r) * r / dr;
+                }
+
+                float sceneSDF(float3 p) {
+                    return mandelbulbSDF(p, 8.0);
+                }
+
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.2;
+                    float3 ro = float3(sin(angle) * 2.5, 0.5, cos(angle) * 2.5);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 100; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.0005) break;
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+
+                    if (t < 10.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float spec = pow(max(dot(reflect(-lightDir, n), -rd), 0.0), 32.0);
+                        float3 col = float3(0.6, 0.3, 0.8) * (diff * 0.7 + 0.3) + float3(1.0) * spec * 0.3;
+                        col *= exp(-t * 0.15);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.05, 0.05, 0.1, 1.0);
+                }
+                """,
+            solution: """
+                z = zr * float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                z += pos;
                 """
         )
     }
