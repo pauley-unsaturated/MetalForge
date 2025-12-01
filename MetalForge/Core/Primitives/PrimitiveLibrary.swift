@@ -237,6 +237,32 @@ final class PrimitiveLibrary {
             unlockedBy: PuzzleID(world: 3, index: 1)
         ))
 
+        register(PrimitiveDefinition(
+            name: "colorRamp",
+            category: .color,
+            signature: "float3 colorRamp(float t, float3 c1, float3 c2, float3 c3)",
+            implementation: """
+                float3 colorRamp(float t, float3 c1, float3 c2, float3 c3) {
+                    return t < 0.5 ? mix(c1, c2, t * 2.0) : mix(c2, c3, (t - 0.5) * 2.0);
+                }
+                """,
+            documentation: "Maps value t (0-1) to a 3-color gradient: c1 → c2 → c3.",
+            unlockedBy: PuzzleID(world: 3, index: 4)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "blendScreen",
+            category: .color,
+            signature: "float3 blendScreen(float3 a, float3 b)",
+            implementation: """
+                float3 blendScreen(float3 a, float3 b) {
+                    return 1.0 - (1.0 - a) * (1.0 - b);
+                }
+                """,
+            documentation: "Screen blend mode - lightens colors, useful for glows and highlights.",
+            unlockedBy: PuzzleID(world: 3, index: 5)
+        ))
+
         // Noise
         register(PrimitiveDefinition(
             name: "hash",

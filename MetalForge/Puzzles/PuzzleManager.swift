@@ -42,6 +42,7 @@ final class PuzzleManager {
         worlds = [
             createWorld1(),
             createWorld2(),
+            createWorld3(),
         ]
 
         // Build cache
@@ -877,6 +878,440 @@ final class PuzzleManager {
                 float dist = length(pa - ba * h) - 0.02;
                 float c = 1.0 - smoothstep(-0.01, 0.01, dist);
                 return float4(c, c, c, 1.0);
+                """
+        )
+    }
+
+    // MARK: - World 3: Color Theory
+
+    private func createWorld3() -> World {
+        World(
+            number: 3,
+            title: "Color Theory",
+            description: "Procedural colors, palettes, and color space transformations",
+            puzzles: [
+                puzzle3_1(),
+                puzzle3_2(),
+                puzzle3_3(),
+                puzzle3_4(),
+                puzzle3_5(),
+            ]
+        )
+    }
+
+    private func puzzle3_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 3, index: 1),
+            title: "Rainbow Road",
+            subtitle: "Procedural color palettes",
+            description: """
+                Welcome to color theory! Instead of hard-coding colors, let's generate them mathematically.
+
+                Inigo Quilez's **cosine palette** is a beautiful technique that creates smooth color gradients using just 4 parameters:
+
+                ```
+                color = a + b * cos(2π * (c * t + d))
+                ```
+
+                Where `t` is your input value (0-1), and a, b, c, d are float3 color vectors.
+
+                Create a horizontal rainbow gradient using:
+                - a = (0.5, 0.5, 0.5) - brightness offset
+                - b = (0.5, 0.5, 0.5) - amplitude
+                - c = (1.0, 1.0, 1.0) - frequency
+                - d = (0.0, 0.33, 0.67) - phase offset per channel
+                """,
+            reference: .animation(
+                shader: """
+                    float3 a = float3(0.5, 0.5, 0.5);
+                    float3 b = float3(0.5, 0.5, 0.5);
+                    float3 c = float3(1.0, 1.0, 1.0);
+                    float3 d = float3(0.0, 0.33, 0.67);
+                    float3 col = a + b * cos(6.28318 * (c * uv.x + d));
+                    return float4(col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .color,
+                functionName: "palette",
+                signature: "float3 palette(float t, float3 a, float3 b, float3 c, float3 d)",
+                implementation: "return a + b * cos(6.28318 * (c * t + d));",
+                documentation: "Inigo Quilez's cosine palette function for procedural coloring."
+            ),
+            hints: [
+                Hint(cost: 0, text: "The formula uses cos() which oscillates between -1 and 1, scaled and offset by a and b"),
+                Hint(cost: 0, text: "Use uv.x as your t value to create a horizontal gradient"),
+                Hint(cost: 1, text: "6.28318 is 2π - this makes cos() complete one full cycle as t goes 0→1"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 a = float3(0.5, 0.5, 0.5);
+                    float3 b = float3(0.5, 0.5, 0.5);
+                    float3 c = float3(1.0, 1.0, 1.0);
+                    float3 d = float3(0.0, 0.33, 0.67);
+                    float3 col = a + b * cos(c * uv.x + d);  // ERROR: Missing 6.28318 * before (c * uv.x + d)
+                    return float4(col, 1.0);
+                    """),
+                Hint(cost: 3, text: "float3 col = a + b * cos(6.28318 * (c * uv.x + d));"),
+            ],
+            starterCode: """
+                // Create a rainbow gradient using the cosine palette formula
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Palette parameters
+                    float3 a = float3(0.5, 0.5, 0.5);  // Brightness
+                    float3 b = float3(0.5, 0.5, 0.5);  // Contrast
+                    float3 c = float3(1.0, 1.0, 1.0);  // Frequency
+                    float3 d = float3(0.0, 0.33, 0.67);  // Phase
+
+                    // TODO: Apply the cosine palette formula
+                    // color = a + b * cos(2π * (c * t + d))
+                    float3 col = float3(uv.x);  // Replace with palette formula
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float3 a = float3(0.5, 0.5, 0.5);
+                float3 b = float3(0.5, 0.5, 0.5);
+                float3 c = float3(1.0, 1.0, 1.0);
+                float3 d = float3(0.0, 0.33, 0.67);
+                float3 col = a + b * cos(6.28318 * (c * uv.x + d));
+                return float4(col, 1.0);
+                """
+        )
+    }
+
+    private func puzzle3_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 3, index: 2),
+            title: "Hue Shift",
+            subtitle: "RGB to HSV conversion",
+            description: """
+                RGB is great for displays, but terrible for color manipulation. Want to make something "more red" or "shift the hue"? You need **HSV** (Hue, Saturation, Value).
+
+                - **Hue** (0-1): The color itself, cycling through the rainbow
+                - **Saturation** (0-1): Color intensity (0 = gray, 1 = vivid)
+                - **Value** (0-1): Brightness (0 = black, 1 = bright)
+
+                Convert the UV gradient to HSV, shift the hue by 0.5 (180°), then convert back to RGB.
+
+                The conversion formulas are complex, so we'll provide helper functions.
+                """,
+            reference: .animation(
+                shader: """
+                    // Simplified: create HSV from position, shift hue
+                    float3 hsv = float3(uv.x + 0.5, 0.8, 0.9);
+                    // HSV to RGB conversion
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                    float3 rgb = hsv.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
+                    return float4(rgb, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .color,
+                functionName: "hsv2rgb",
+                signature: "float3 hsv2rgb(float3 c)",
+                implementation: """
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+                    """,
+                documentation: "Converts HSV color to RGB color space."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Create an HSV color where hue = uv.x + 0.5 (the shift)"),
+                Hint(cost: 0, text: "Use saturation ~0.8 and value ~0.9 for vivid colors"),
+                Hint(cost: 1, text: "The HSV→RGB formula uses fract() to wrap hue values > 1"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 hsv = float3(uv.x, 0.8, 0.9);  // ERROR: Hue should be uv.x + 0.5 to shift
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                    float3 rgb = hsv.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
+                    return float4(rgb, 1.0);
+                    """),
+                Hint(cost: 3, text: "float3 hsv = float3(uv.x + 0.5, 0.8, 0.9);"),
+            ],
+            starterCode: """
+                // Create a hue-shifted gradient using HSV
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Create HSV color: (hue, saturation, value)
+                    // Shift hue by 0.5 (180 degrees)
+                    float3 hsv = float3(uv.x, 0.8, 0.9);  // TODO: Add hue shift
+
+                    // HSV to RGB conversion (magic formula)
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                    float3 rgb = hsv.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
+
+                    return float4(rgb, 1.0);
+                }
+                """,
+            solution: """
+                float3 hsv = float3(uv.x + 0.5, 0.8, 0.9);
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                float3 rgb = hsv.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), hsv.y);
+                return float4(rgb, 1.0);
+                """
+        )
+    }
+
+    private func puzzle3_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 3, index: 3),
+            title: "Color Wheel",
+            subtitle: "Polar coordinates meet color",
+            description: """
+                Let's create a classic color wheel! This combines two concepts:
+
+                1. **Polar coordinates**: Convert (x, y) to (angle, distance) using [`atan2()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70)
+                2. **HSV color**: Map angle → hue, distance → saturation
+
+                The angle from `atan2(y, x)` ranges from -π to π. Normalize it to 0-1 for hue.
+
+                Create a color wheel where:
+                - Hue follows the angle around the center
+                - Saturation increases from center to edge
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv - 0.5;
+                    float angle = atan2(p.y, p.x);
+                    float hue = angle / 6.28318 + 0.5;
+                    float sat = length(p) * 2.0;
+                    float3 hsv = float3(hue, clamp(sat, 0.0, 1.0), 1.0);
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 rgb_p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                    float3 rgb = hsv.z * mix(K.xxx, clamp(rgb_p - K.xxx, 0.0, 1.0), hsv.y);
+                    return float4(rgb, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb"],
+            unlocksPrimitive: nil,
+            hints: [
+                Hint(cost: 0, text: "atan2(y, x) returns angle in radians (-π to π)"),
+                Hint(cost: 0, text: "Divide by 2π and add 0.5 to normalize angle to 0-1 range"),
+                Hint(cost: 1, text: "Use length(p) for distance from center - multiply by 2 so edge = 1.0"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv - 0.5;
+                    float angle = atan2(p.y, p.x);
+                    float hue = angle;  // ERROR: Needs normalization: angle / 6.28318 + 0.5
+                    float sat = length(p);  // ERROR: Multiply by 2.0 for full saturation at edge
+                    float3 hsv = float3(hue, clamp(sat, 0.0, 1.0), 1.0);
+                    // ... HSV to RGB conversion ...
+                    """),
+                Hint(cost: 3, text: "float hue = angle / 6.28318 + 0.5; float sat = length(p) * 2.0;"),
+            ],
+            starterCode: """
+                // Create a color wheel using polar coordinates
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv - 0.5;  // Center coordinates
+
+                    // Convert to polar coordinates
+                    float angle = atan2(p.y, p.x);  // -π to π
+                    float dist = length(p);  // 0 to ~0.7
+
+                    // TODO: Map to HSV
+                    // Hue = normalized angle (0-1)
+                    // Saturation = distance from center
+                    float hue = 0.0;  // Calculate from angle
+                    float sat = 0.0;  // Calculate from distance
+
+                    float3 hsv = float3(hue, clamp(sat, 0.0, 1.0), 1.0);
+
+                    // HSV to RGB
+                    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                    float3 rgb_p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                    float3 rgb = hsv.z * mix(K.xxx, clamp(rgb_p - K.xxx, 0.0, 1.0), hsv.y);
+
+                    return float4(rgb, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv - 0.5;
+                float angle = atan2(p.y, p.x);
+                float hue = angle / 6.28318 + 0.5;
+                float sat = length(p) * 2.0;
+                float3 hsv = float3(hue, clamp(sat, 0.0, 1.0), 1.0);
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 rgb_p = abs(fract(hsv.xxx + K.xyz) * 6.0 - K.www);
+                float3 rgb = hsv.z * mix(K.xxx, clamp(rgb_p - K.xxx, 0.0, 1.0), hsv.y);
+                return float4(rgb, 1.0);
+                """
+        )
+    }
+
+    private func puzzle3_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 3, index: 4),
+            title: "Gradient Mapping",
+            subtitle: "Color SDFs by distance",
+            description: """
+                Here's a powerful technique: use SDF distance to look up colors from a gradient!
+
+                Instead of just white/black shapes, we can create beautiful glowing effects by mapping distance to color using [`mix()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=80).
+
+                Create a circle with:
+                - Hot core (yellow/white at center)
+                - Orange glow transitioning outward
+                - Dark red edge fading to black
+                """,
+            reference: .animation(
+                shader: """
+                    float2 p = uv - 0.5;
+                    float d = length(p);
+                    float3 col1 = float3(1.0, 1.0, 0.8);  // Hot core
+                    float3 col2 = float3(1.0, 0.4, 0.0);  // Orange
+                    float3 col3 = float3(0.2, 0.0, 0.0);  // Dark red
+                    float t = clamp(d * 3.0, 0.0, 1.0);
+                    float3 col = t < 0.5 ? mix(col1, col2, t * 2.0) : mix(col2, col3, (t - 0.5) * 2.0);
+                    col *= 1.0 - smoothstep(0.3, 0.5, d);
+                    return float4(col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .color,
+                functionName: "colorRamp",
+                signature: "float3 colorRamp(float t, float3 c1, float3 c2, float3 c3)",
+                implementation: "return t < 0.5 ? mix(c1, c2, t * 2.0) : mix(c2, c3, (t - 0.5) * 2.0);",
+                documentation: "Maps value t (0-1) to a 3-color gradient: c1 → c2 → c3."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Use distance from center as your t value for the gradient"),
+                Hint(cost: 0, text: "Scale and clamp distance to get t in 0-1 range"),
+                Hint(cost: 1, text: "Use two mix() calls: one for t<0.5 (col1→col2), one for t>=0.5 (col2→col3)"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float2 p = uv - 0.5;
+                    float d = length(p);
+                    float3 col1 = float3(1.0, 1.0, 0.8);
+                    float3 col2 = float3(1.0, 0.4, 0.0);
+                    float3 col3 = float3(0.2, 0.0, 0.0);
+                    float t = d * 3.0;  // ERROR: Needs clamp(d * 3.0, 0.0, 1.0)
+                    float3 col = mix(col1, col3, t);  // ERROR: Should use 3-color ramp with col2 in middle
+                    col *= 1.0 - smoothstep(0.3, 0.5, d);
+                    return float4(col, 1.0);
+                    """),
+                Hint(cost: 3, text: "float3 col = t < 0.5 ? mix(col1, col2, t * 2.0) : mix(col2, col3, (t - 0.5) * 2.0);"),
+            ],
+            starterCode: """
+                // Create a glowing orb with gradient mapping
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float2 p = uv - 0.5;
+                    float d = length(p);
+
+                    // Define gradient colors
+                    float3 col1 = float3(1.0, 1.0, 0.8);  // Hot core (yellow-white)
+                    float3 col2 = float3(1.0, 0.4, 0.0);  // Middle (orange)
+                    float3 col3 = float3(0.2, 0.0, 0.0);  // Edge (dark red)
+
+                    // TODO: Map distance to gradient
+                    // Scale d to useful range, clamp to 0-1
+                    float t = d;  // Adjust this
+
+                    // TODO: Create 3-color gradient
+                    float3 col = float3(1.0);  // Replace with gradient lookup
+
+                    // Fade out at edge
+                    col *= 1.0 - smoothstep(0.3, 0.5, d);
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float2 p = uv - 0.5;
+                float d = length(p);
+                float3 col1 = float3(1.0, 1.0, 0.8);
+                float3 col2 = float3(1.0, 0.4, 0.0);
+                float3 col3 = float3(0.2, 0.0, 0.0);
+                float t = clamp(d * 3.0, 0.0, 1.0);
+                float3 col = t < 0.5 ? mix(col1, col2, t * 2.0) : mix(col2, col3, (t - 0.5) * 2.0);
+                col *= 1.0 - smoothstep(0.3, 0.5, d);
+                return float4(col, 1.0);
+                """
+        )
+    }
+
+    private func puzzle3_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 3, index: 5),
+            title: "Blend Modes",
+            subtitle: "Photoshop-style color blending",
+            description: """
+                Ever wonder how Photoshop blend modes work? They're just math!
+
+                Common blend modes:
+                - **Multiply**: `a * b` - darkens, great for shadows
+                - **Screen**: `1 - (1-a) * (1-b)` - lightens, great for glows
+                - **Overlay**: Combines both based on brightness
+
+                Create a pattern by blending a horizontal gradient with a vertical gradient using **screen** blend mode.
+                """,
+            reference: .animation(
+                shader: """
+                    float3 a = float3(uv.x, uv.x * 0.5, 0.2);
+                    float3 b = float3(0.2, uv.y * 0.8, uv.y);
+                    float3 col = 1.0 - (1.0 - a) * (1.0 - b);
+                    return float4(col, 1.0);
+                    """,
+                duration: 0
+            ),
+            verification: .standard,
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .color,
+                functionName: "blendScreen",
+                signature: "float3 blendScreen(float3 a, float3 b)",
+                implementation: "return 1.0 - (1.0 - a) * (1.0 - b);",
+                documentation: "Screen blend mode - lightens colors, useful for glows and highlights."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Screen blend inverts both colors, multiplies, then inverts the result"),
+                Hint(cost: 0, text: "Create two different color gradients based on uv.x and uv.y"),
+                Hint(cost: 1, text: "The screen formula is: 1 - (1-a) * (1-b)"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 a = float3(uv.x, uv.x * 0.5, 0.2);
+                    float3 b = float3(0.2, uv.y * 0.8, uv.y);
+                    float3 col = a * b;  // ERROR: This is multiply, use screen: 1.0 - (1.0 - a) * (1.0 - b)
+                    return float4(col, 1.0);
+                    """),
+                Hint(cost: 3, text: "float3 col = 1.0 - (1.0 - a) * (1.0 - b);"),
+            ],
+            starterCode: """
+                // Blend two gradients using screen blend mode
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    // Horizontal gradient (warm colors)
+                    float3 a = float3(uv.x, uv.x * 0.5, 0.2);
+
+                    // Vertical gradient (cool colors)
+                    float3 b = float3(0.2, uv.y * 0.8, uv.y);
+
+                    // TODO: Apply screen blend mode
+                    // Screen: 1 - (1-a) * (1-b)
+                    float3 col = a;  // Replace with screen blend
+
+                    return float4(col, 1.0);
+                }
+                """,
+            solution: """
+                float3 a = float3(uv.x, uv.x * 0.5, 0.2);
+                float3 b = float3(0.2, uv.y * 0.8, uv.y);
+                float3 col = 1.0 - (1.0 - a) * (1.0 - b);
+                return float4(col, 1.0);
                 """
         )
     }
