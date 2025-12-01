@@ -528,6 +528,101 @@ final class PrimitiveLibrary {
             documentation: "Applies exponential distance fog to a color.",
             unlockedBy: PuzzleID(world: 7, index: 5)
         ))
+
+        // Lighting
+        register(PrimitiveDefinition(
+            name: "diffuse",
+            category: .lighting,
+            signature: "float diffuse(float3 n, float3 lightDir)",
+            implementation: """
+                float diffuse(float3 n, float3 lightDir) {
+                    return max(dot(n, lightDir), 0.0);
+                }
+                """,
+            documentation: "Calculates Lambert diffuse lighting intensity from surface normal and light direction.",
+            unlockedBy: PuzzleID(world: 8, index: 1)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "specular",
+            category: .lighting,
+            signature: "float specular(float3 n, float3 lightDir, float3 viewDir, float shininess)",
+            implementation: """
+                float specular(float3 n, float3 lightDir, float3 viewDir, float shininess) {
+                    float3 h = normalize(lightDir + viewDir);
+                    return pow(max(dot(n, h), 0.0), shininess);
+                }
+                """,
+            documentation: "Calculates Blinn-Phong specular highlight intensity.",
+            unlockedBy: PuzzleID(world: 8, index: 2)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "ambientOcclusion",
+            category: .lighting,
+            signature: "float ambientOcclusion(float3 p, float3 n, float stepSize, int steps)",
+            implementation: """
+                float ambientOcclusion(float3 p, float3 n, float stepSize, int steps) {
+                    float ao = 0.0;
+                    float weight = 1.0;
+                    for (int i = 1; i <= steps; i++) {
+                        float dist = stepSize * float(i);
+                        // Note: requires sceneSDF to be defined in shader
+                        // ao += weight * (dist - sceneSDF(p + n * dist));
+                        weight *= 0.5;
+                    }
+                    return 1.0 - ao;
+                }
+                """,
+            documentation: "Calculates ambient occlusion by sampling along the normal. Requires sceneSDF function.",
+            unlockedBy: PuzzleID(world: 8, index: 3)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "hardShadow",
+            category: .lighting,
+            signature: "float hardShadow(float3 ro, float3 rd, float minT, float maxT)",
+            implementation: """
+                float hardShadow(float3 ro, float3 rd, float minT, float maxT) {
+                    float t = minT;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        // Note: requires sceneSDF to be defined in shader
+                        // float d = sceneSDF(p);
+                        // if (d < 0.001) return 0.0;
+                        // t += d;
+                        // if (t > maxT) break;
+                    }
+                    return 1.0;
+                }
+                """,
+            documentation: "Raymarches toward light to determine hard shadow. Requires sceneSDF function.",
+            unlockedBy: PuzzleID(world: 8, index: 4)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "softShadow",
+            category: .lighting,
+            signature: "float softShadow(float3 ro, float3 rd, float minT, float maxT, float k)",
+            implementation: """
+                float softShadow(float3 ro, float3 rd, float minT, float maxT, float k) {
+                    float result = 1.0;
+                    float t = minT;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        // Note: requires sceneSDF to be defined in shader
+                        // float d = sceneSDF(p);
+                        // if (d < 0.001) return 0.0;
+                        // result = min(result, k * d / t);
+                        // t += d;
+                        // if (t > maxT) break;
+                    }
+                    return result;
+                }
+                """,
+            documentation: "Raymarches toward light for soft shadows with penumbra. k controls softness. Requires sceneSDF function.",
+            unlockedBy: PuzzleID(world: 8, index: 5)
+        ))
     }
 
     private func register(_ primitive: PrimitiveDefinition) {

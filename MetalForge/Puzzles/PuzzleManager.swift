@@ -47,6 +47,7 @@ final class PuzzleManager {
             createWorld5(),
             createWorld6(),
             createWorld7(),
+            createWorld8(),
         ]
 
         // Build cache
@@ -3986,6 +3987,834 @@ final class PuzzleManager {
             solution: """
                 float check = step(0.5, fract((floor(p.x) + floor(p.z)) * 0.5)) * 0.5 + 0.5;
                 col = float3(check) * diff;
+                """
+        )
+    }
+
+    // MARK: - World 8: Light & Shadow
+
+    private func createWorld8() -> World {
+        World(
+            number: 8,
+            title: "Light & Shadow",
+            description: "Master the art of illumination! Learn diffuse and specular lighting, ambient occlusion, and shadow techniques to bring your 3D scenes to life.",
+            puzzles: [
+                puzzle8_1(),
+                puzzle8_2(),
+                puzzle8_3(),
+                puzzle8_4(),
+                puzzle8_5(),
+            ]
+        )
+    }
+
+    // Shared 3D scene for lighting puzzles
+    private var world8SceneHelper: String {
+        """
+        float sceneSDF(float3 p) {
+            float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+            float plane = p.y + 0.5;
+            return min(sphere, plane);
+        }
+
+        float3 calcNormal(float3 p) {
+            float2 e = float2(0.001, 0.0);
+            return normalize(float3(
+                sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+            ));
+        }
+        """
+    }
+
+    private func puzzle8_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 8, index: 1),
+            title: "Diffuse Light",
+            subtitle: "Lambert's cosine law",
+            description: """
+                Let's properly light our scenes! **Diffuse lighting** (Lambert) models matte surfaces that scatter light equally in all directions.
+
+                The brightness depends on the angle between the surface normal and light direction:
+
+                ```
+                float diffuse = max(dot(normal, lightDir), 0.0);
+                ```
+
+                [`dot()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=85) gives us the cosine of the angle between vectors. When they point the same way (surface faces light), dot = 1. When perpendicular, dot = 0.
+
+                We clamp with `max(..., 0.0)` because negative values (backface) should be dark, not negative!
+
+                Implement diffuse lighting with a light coming from (1, 1, 1).
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+                        float plane = p.y + 0.5;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float3 col = float3(0.9, 0.7, 0.5) * diff;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .lighting,
+                functionName: "diffuse",
+                signature: "float diffuse(float3 n, float3 lightDir)",
+                implementation: "return max(dot(n, lightDir), 0.0);",
+                documentation: "Calculates Lambert diffuse lighting intensity."
+            ),
+            hints: [
+                Hint(cost: 0, text: "dot(normal, lightDir) gives cosine of angle between them"),
+                Hint(cost: 0, text: "Use max() to clamp negative values to zero"),
+                Hint(cost: 1, text: "float diff = max(dot(n, lightDir), 0.0);"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                    float diff = dot(n, lightDir);  // ERROR: Missing max(..., 0.0) to clamp negatives
+                    float3 col = float3(0.9, 0.7, 0.5) * diff;
+                    """),
+                Hint(cost: 3, text: "float diff = max(dot(n, lightDir), 0.0);"),
+            ],
+            starterCode: """
+                \(world8SceneHelper)
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+
+                        // TODO: Implement diffuse lighting
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = 1.0;  // Replace with: max(dot(n, lightDir), 0.0)
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                float diff = max(dot(n, lightDir), 0.0);
+                """
+        )
+    }
+
+    private func puzzle8_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 8, index: 2),
+            title: "Specular Highlight",
+            subtitle: "Shiny surfaces",
+            description: """
+                Diffuse lighting looks matte. For shiny surfaces, we need **specular highlights**—bright spots where light reflects toward the viewer.
+
+                The **Blinn-Phong** model uses the half-vector between light and view directions:
+
+                ```
+                float3 halfVec = normalize(lightDir + viewDir);
+                float spec = pow(max(dot(normal, halfVec), 0.0), shininess);
+                ```
+
+                - **halfVec**: Halfway between light and view directions
+                - **shininess**: Higher = tighter highlight (32-256 typical)
+                - [`pow()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70): Raises to power for sharp falloff
+
+                Add specular highlights with shininess 32. The view direction is `-rd` (opposite of ray direction).
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+                        float plane = p.y + 0.5;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float3 viewDir = -rd;
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float3 halfVec = normalize(lightDir + viewDir);
+                        float spec = pow(max(dot(n, halfVec), 0.0), 32.0);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff + float3(1.0) * spec * 0.5;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog", "diffuse"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .lighting,
+                functionName: "specular",
+                signature: "float specular(float3 n, float3 lightDir, float3 viewDir, float shininess)",
+                implementation: "float3 h = normalize(lightDir + viewDir); return pow(max(dot(n, h), 0.0), shininess);",
+                documentation: "Calculates Blinn-Phong specular highlight intensity."
+            ),
+            hints: [
+                Hint(cost: 0, text: "The half-vector is normalize(lightDir + viewDir)"),
+                Hint(cost: 0, text: "viewDir = -rd (opposite of ray direction)"),
+                Hint(cost: 1, text: "spec = pow(max(dot(n, halfVec), 0.0), 32.0);"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float3 viewDir = -rd;
+                    float3 halfVec = lightDir + viewDir;  // ERROR: Missing normalize()
+                    float spec = pow(max(dot(n, halfVec), 0.0), 32.0);
+                    """),
+                Hint(cost: 3, text: "float3 halfVec = normalize(lightDir + viewDir); float spec = pow(max(dot(n, halfVec), 0.0), 32.0);"),
+            ],
+            starterCode: """
+                \(world8SceneHelper)
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float3 viewDir = -rd;
+
+                        // Diffuse
+                        float diff = max(dot(n, lightDir), 0.0);
+
+                        // TODO: Specular (Blinn-Phong)
+                        // Step 1: float3 halfVec = normalize(lightDir + viewDir);
+                        // Step 2: float spec = pow(max(dot(n, halfVec), 0.0), 32.0);
+                        float spec = 0.0;  // Replace with specular calculation
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff + float3(1.0) * spec * 0.5;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                float3 halfVec = normalize(lightDir + viewDir);
+                float spec = pow(max(dot(n, halfVec), 0.0), 32.0);
+                """
+        )
+    }
+
+    private func puzzle8_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 8, index: 3),
+            title: "Ambient Occlusion",
+            subtitle: "Soft shadows in crevices",
+            description: """
+                **Ambient Occlusion (AO)** darkens areas where surfaces are close together—like corners, crevices, and under objects.
+
+                A simple SDF-based AO technique samples along the normal:
+
+                ```
+                float ao = 0.0;
+                float scale = 1.0;
+                for (int i = 0; i < 5; i++) {
+                    float dist = 0.01 + 0.1 * float(i);
+                    float d = sceneSDF(p + n * dist);
+                    ao += (dist - d) * scale;
+                    scale *= 0.5;
+                }
+                ao = 1.0 - clamp(ao, 0.0, 1.0);
+                ```
+
+                If the SDF at a sample point is less than expected, something is occluding—darken that pixel!
+
+                Implement ambient occlusion for the scene.
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+                        float plane = p.y + 0.5;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float calcAO(float3 p, float3 n) {
+                        float ao = 0.0;
+                        float scale = 1.0;
+                        for (int i = 0; i < 5; i++) {
+                            float dist = 0.01 + 0.1 * float(i);
+                            float d = sceneSDF(p + n * dist);
+                            ao += (dist - d) * scale;
+                            scale *= 0.5;
+                        }
+                        return 1.0 - clamp(ao, 0.0, 1.0);
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float ao = calcAO(p, n);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * ao + float3(0.1) * ao;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog", "diffuse", "specular"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .lighting,
+                functionName: "ambientOcclusion",
+                signature: "float ambientOcclusion(float3 p, float3 n)",
+                implementation: "float ao = 0.0; float s = 1.0; for (int i = 0; i < 5; i++) { float d = 0.01 + 0.1 * float(i); ao += (d - sceneSDF(p + n * d)) * s; s *= 0.5; } return 1.0 - clamp(ao, 0.0, 1.0);",
+                documentation: "Calculates ambient occlusion by sampling along normal."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Sample the SDF at points along the normal: p + n * dist"),
+                Hint(cost: 0, text: "If SDF < expected distance, something is blocking - accumulate occlusion"),
+                Hint(cost: 1, text: "ao += (dist - d) * scale; where d is sceneSDF(p + n * dist)"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float calcAO(float3 p, float3 n) {
+                        float ao = 0.0;
+                        float scale = 1.0;
+                        for (int i = 0; i < 5; i++) {
+                            float dist = 0.01 + 0.1 * float(i);
+                            float d = sceneSDF(p + n * dist);
+                            ao += d * scale;  // ERROR: Should be (dist - d) * scale
+                            scale *= 0.5;
+                        }
+                        return 1.0 - clamp(ao, 0.0, 1.0);
+                    }
+                    """),
+                Hint(cost: 3, text: "ao += (dist - d) * scale; ... return 1.0 - clamp(ao, 0.0, 1.0);"),
+            ],
+            starterCode: """
+                \(world8SceneHelper)
+
+                // TODO: Implement calcAO
+                float calcAO(float3 p, float3 n) {
+                    float ao = 0.0;
+                    float scale = 1.0;
+                    for (int i = 0; i < 5; i++) {
+                        float dist = 0.01 + 0.1 * float(i);
+                        float d = sceneSDF(p + n * dist);
+
+                        // TODO: Accumulate occlusion
+                        // ao += (dist - d) * scale;
+
+                        scale *= 0.5;
+                    }
+                    return 1.0;  // Replace with: 1.0 - clamp(ao, 0.0, 1.0)
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float ao = calcAO(p, n);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * ao + float3(0.1) * ao;
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                ao += (dist - d) * scale;
+                // at end:
+                return 1.0 - clamp(ao, 0.0, 1.0);
+                """
+        )
+    }
+
+    private func puzzle8_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 8, index: 4),
+            title: "Hard Shadows",
+            subtitle: "Binary shadow rays",
+            description: """
+                Time for real **shadows**! To check if a point is in shadow, shoot a ray toward the light and see if it hits anything.
+
+                ```
+                float shadow(float3 p, float3 lightDir) {
+                    float t = 0.02;  // Start slightly above surface
+                    for (int i = 0; i < 32; i++) {
+                        float d = sceneSDF(p + lightDir * t);
+                        if (d < 0.001) return 0.0;  // In shadow!
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    return 1.0;  // Lit
+                }
+                ```
+
+                Start at t = 0.02 (not 0) to avoid self-shadowing. Return 0 if blocked, 1 if lit.
+
+                Add hard shadows to the scene!
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+                        float plane = p.y + 0.5;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float hardShadow(float3 p, float3 lightDir) {
+                        float t = 0.02;
+                        for (int i = 0; i < 32; i++) {
+                            float d = sceneSDF(p + lightDir * t);
+                            if (d < 0.001) return 0.0;
+                            t += d;
+                            if (t > 10.0) break;
+                        }
+                        return 1.0;
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float shadow = hardShadow(p, lightDir);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * shadow + float3(0.1);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog", "diffuse", "specular", "ambientOcclusion"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .lighting,
+                functionName: "hardShadow",
+                signature: "float hardShadow(float3 p, float3 lightDir)",
+                implementation: "float t = 0.02; for (int i = 0; i < 32; i++) { float d = sceneSDF(p + lightDir * t); if (d < 0.001) return 0.0; t += d; if (t > 10.0) break; } return 1.0;",
+                documentation: "Returns 0 if point is in shadow, 1 if lit."
+            ),
+            hints: [
+                Hint(cost: 0, text: "Start at t = 0.02 to avoid hitting the surface you're starting from"),
+                Hint(cost: 0, text: "If SDF < 0.001 during march, return 0 (in shadow)"),
+                Hint(cost: 1, text: "March along lightDir from p, return 0 if blocked, 1 if clear"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float hardShadow(float3 p, float3 lightDir) {
+                        float t = 0.0;  // ERROR: Should be 0.02 to avoid self-shadowing
+                        for (int i = 0; i < 32; i++) {
+                            float d = sceneSDF(p + lightDir * t);
+                            if (d < 0.001) return 0.0;
+                            t += d;
+                            if (t > 10.0) break;
+                        }
+                        return 1.0;
+                    }
+                    """),
+                Hint(cost: 3, text: "float t = 0.02; ... if (d < 0.001) return 0.0; ... return 1.0;"),
+            ],
+            starterCode: """
+                \(world8SceneHelper)
+
+                // TODO: Implement hard shadows
+                float hardShadow(float3 p, float3 lightDir) {
+                    float t = 0.02;  // Start slightly above surface
+                    for (int i = 0; i < 32; i++) {
+                        float d = sceneSDF(p + lightDir * t);
+
+                        // TODO: Return 0.0 if blocked (d < 0.001)
+
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    return 1.0;  // Not blocked - fully lit
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float shadow = hardShadow(p, lightDir);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * shadow + float3(0.1);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                if (d < 0.001) return 0.0;
+                """
+        )
+    }
+
+    private func puzzle8_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 8, index: 5),
+            title: "Soft Shadows",
+            subtitle: "Penumbra simulation",
+            description: """
+                Hard shadows look harsh. Real shadows have **soft edges (penumbra)** where light is partially blocked.
+
+                The trick: track how *close* we came to hitting something:
+
+                ```
+                float softShadow(float3 p, float3 lightDir, float k) {
+                    float result = 1.0;
+                    float t = 0.02;
+                    for (int i = 0; i < 32; i++) {
+                        float d = sceneSDF(p + lightDir * t);
+                        if (d < 0.001) return 0.0;
+                        result = min(result, k * d / t);  // Track closest approach
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    return result;
+                }
+                ```
+
+                The parameter `k` controls softness (higher = sharper shadows, try 8-32).
+
+                Implement soft shadows with k = 16!
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.3, 0.0)) - 0.8;
+                        float plane = p.y + 0.5;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float softShadow(float3 p, float3 lightDir, float k) {
+                        float result = 1.0;
+                        float t = 0.02;
+                        for (int i = 0; i < 32; i++) {
+                            float d = sceneSDF(p + lightDir * t);
+                            if (d < 0.001) return 0.0;
+                            result = min(result, k * d / t);
+                            t += d;
+                            if (t > 10.0) break;
+                        }
+                        return result;
+                    }
+
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float shadow = softShadow(p, lightDir, 16.0);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * shadow + float3(0.1);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 20.94
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.95), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule", "getRayDirection", "raymarch", "lookAt", "calcNormal", "applyFog", "diffuse", "specular", "ambientOcclusion", "hardShadow"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .lighting,
+                functionName: "softShadow",
+                signature: "float softShadow(float3 p, float3 lightDir, float k)",
+                implementation: "float res = 1.0; float t = 0.02; for (int i = 0; i < 32; i++) { float d = sceneSDF(p + lightDir * t); if (d < 0.001) return 0.0; res = min(res, k * d / t); t += d; if (t > 10.0) break; } return res;",
+                documentation: "Returns soft shadow factor (0=shadow, 1=lit) with penumbra controlled by k."
+            ),
+            hints: [
+                Hint(cost: 0, text: "k * d / t measures how close we came relative to distance traveled"),
+                Hint(cost: 0, text: "The minimum of all these ratios gives the shadow softness"),
+                Hint(cost: 1, text: "result = min(result, k * d / t); inside the loop"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float softShadow(float3 p, float3 lightDir, float k) {
+                        float result = 1.0;
+                        float t = 0.02;
+                        for (int i = 0; i < 32; i++) {
+                            float d = sceneSDF(p + lightDir * t);
+                            if (d < 0.001) return 0.0;
+                            result = min(result, d / t);  // ERROR: Missing k * before d
+                            t += d;
+                            if (t > 10.0) break;
+                        }
+                        return result;
+                    }
+                    """),
+                Hint(cost: 3, text: "result = min(result, k * d / t);"),
+            ],
+            starterCode: """
+                \(world8SceneHelper)
+
+                // TODO: Implement soft shadows
+                float softShadow(float3 p, float3 lightDir, float k) {
+                    float result = 1.0;
+                    float t = 0.02;
+                    for (int i = 0; i < 32; i++) {
+                        float d = sceneSDF(p + lightDir * t);
+                        if (d < 0.001) return 0.0;
+
+                        // TODO: Track closest approach
+                        // result = min(result, k * d / t);
+
+                        t += d;
+                        if (t > 10.0) break;
+                    }
+                    return result;
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float angle = u.time * 0.3;
+                    float3 ro = float3(sin(angle) * 3.0, 1.5, cos(angle) * 3.0);
+                    float3 target = float3(0.0);
+                    float3 forward = normalize(target - ro);
+                    float3 right = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+                    float3 up = cross(forward, right);
+                    float3 rd = normalize(right * (uv.x - 0.5) + up * (uv.y - 0.5) + forward);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float shadow = softShadow(p, lightDir, 16.0);
+
+                        float3 col = float3(0.9, 0.7, 0.5) * diff * shadow + float3(0.1);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                result = min(result, k * d / t);
                 """
         )
     }
