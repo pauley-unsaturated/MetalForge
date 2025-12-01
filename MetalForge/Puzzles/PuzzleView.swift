@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 /// Main puzzle solving interface
 struct PuzzleView: View {
@@ -214,9 +215,18 @@ struct PuzzleView: View {
                     Text("Description")
                         .font(.headline)
 
-                    Text(puzzle.description)
-                        .font(.body)
-                        .foregroundColor(.gray)
+                    Markdown(puzzle.description)
+                        .markdownTheme(.gitHub)
+                        .markdownTextStyle {
+                            ForegroundColor(.gray)
+                            FontSize(14)
+                        }
+                        .markdownBlockStyle(\.codeBlock) { configuration in
+                            configuration.label
+                                .padding(8)
+                                .background(Color.black.opacity(0.3))
+                                .cornerRadius(6)
+                        }
 
                     // Hints
                     if !puzzle.hints.isEmpty {

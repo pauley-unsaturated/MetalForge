@@ -97,8 +97,11 @@ enum PrimitiveCategory: String, CaseIterable {
     case sdf2d
     case color
     case noise
+    case animation
     case sdf3d
     case raymarching
+    case lighting
+    case advanced
 
     var displayName: String {
         switch self {
@@ -106,8 +109,11 @@ enum PrimitiveCategory: String, CaseIterable {
         case .sdf2d: return "SDF 2D"
         case .color: return "Color"
         case .noise: return "Noise"
+        case .animation: return "Animation"
         case .sdf3d: return "SDF 3D"
         case .raymarching: return "Raymarching"
+        case .lighting: return "Lighting"
+        case .advanced: return "Advanced"
         }
     }
 

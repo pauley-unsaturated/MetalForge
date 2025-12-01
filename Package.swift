@@ -11,10 +11,15 @@ let package = Package(
     products: [
         .executable(name: "MetalForge", targets: ["MetalForge"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0")
+    ],
     targets: [
         .executableTarget(
             name: "MetalForge",
-            dependencies: [],
+            dependencies: [
+                .product(name: "MarkdownUI", package: "swift-markdown-ui")
+            ],
             path: "MetalForge",
             resources: [
                 .process("Resources")

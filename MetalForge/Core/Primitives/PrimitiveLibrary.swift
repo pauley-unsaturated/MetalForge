@@ -52,6 +52,19 @@ final class PrimitiveLibrary {
         ))
 
         register(PrimitiveDefinition(
+            name: "smoothEdge",
+            category: .sdf2d,
+            signature: "float smoothEdge(float d, float w)",
+            implementation: """
+                float smoothEdge(float d, float w) {
+                    return 1.0 - smoothstep(-w, w, d);
+                }
+                """,
+            documentation: "Returns a smooth anti-aliased edge from an SDF distance. w controls the edge softness.",
+            unlockedBy: PuzzleID(world: 2, index: 2)
+        ))
+
+        register(PrimitiveDefinition(
             name: "sdBox",
             category: .sdf2d,
             signature: "float sdBox(float2 p, float2 b)",
@@ -130,6 +143,22 @@ final class PrimitiveLibrary {
                 """,
             documentation: "Smoothly blends two SDFs together with blend radius k.",
             unlockedBy: PuzzleID(world: 2, index: 7)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "sdSegment",
+            category: .sdf2d,
+            signature: "float sdSegment(float2 p, float2 a, float2 b)",
+            implementation: """
+                float sdSegment(float2 p, float2 a, float2 b) {
+                    float2 pa = p - a;
+                    float2 ba = b - a;
+                    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    return length(pa - ba * h);
+                }
+                """,
+            documentation: "Returns distance from point p to line segment from a to b.",
+            unlockedBy: PuzzleID(world: 2, index: 8)
         ))
 
         register(PrimitiveDefinition(
