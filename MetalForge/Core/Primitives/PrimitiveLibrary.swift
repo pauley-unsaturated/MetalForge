@@ -413,6 +413,77 @@ final class PrimitiveLibrary {
             documentation: "Returns a wave value for animated distortion effects.",
             unlockedBy: PuzzleID(world: 5, index: 5)
         ))
+
+        // SDF 3D
+        register(PrimitiveDefinition(
+            name: "sdSphere",
+            category: .sdf3d,
+            signature: "float sdSphere(float3 p, float r)",
+            implementation: """
+                float sdSphere(float3 p, float r) {
+                    return length(p) - r;
+                }
+                """,
+            documentation: "Returns signed distance from point p to a sphere of radius r centered at origin.",
+            unlockedBy: PuzzleID(world: 6, index: 1)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "sdBox3d",
+            category: .sdf3d,
+            signature: "float sdBox3d(float3 p, float3 b)",
+            implementation: """
+                float sdBox3d(float3 p, float3 b) {
+                    float3 d = abs(p) - b;
+                    return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                }
+                """,
+            documentation: "Returns signed distance from point p to a box with half-extents b.",
+            unlockedBy: PuzzleID(world: 6, index: 2)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "sdPlane",
+            category: .sdf3d,
+            signature: "float sdPlane(float3 p, float3 n, float h)",
+            implementation: """
+                float sdPlane(float3 p, float3 n, float h) {
+                    return dot(p, normalize(n)) + h;
+                }
+                """,
+            documentation: "Returns signed distance from point p to plane with normal n at height h.",
+            unlockedBy: PuzzleID(world: 6, index: 3)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "sdTorus",
+            category: .sdf3d,
+            signature: "float sdTorus(float3 p, float R, float r)",
+            implementation: """
+                float sdTorus(float3 p, float R, float r) {
+                    float2 q = float2(length(p.xz) - R, p.y);
+                    return length(q) - r;
+                }
+                """,
+            documentation: "Returns signed distance from point p to a torus with ring radius R and tube radius r.",
+            unlockedBy: PuzzleID(world: 6, index: 4)
+        ))
+
+        register(PrimitiveDefinition(
+            name: "sdCapsule",
+            category: .sdf3d,
+            signature: "float sdCapsule(float3 p, float3 a, float3 b, float r)",
+            implementation: """
+                float sdCapsule(float3 p, float3 a, float3 b, float r) {
+                    float3 pa = p - a;
+                    float3 ba = b - a;
+                    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    return length(pa - ba * h) - r;
+                }
+                """,
+            documentation: "Returns signed distance from point p to a capsule from a to b with radius r.",
+            unlockedBy: PuzzleID(world: 6, index: 5)
+        ))
     }
 
     private func register(_ primitive: PrimitiveDefinition) {

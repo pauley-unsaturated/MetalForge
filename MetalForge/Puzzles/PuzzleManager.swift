@@ -45,6 +45,7 @@ final class PuzzleManager {
             createWorld3(),
             createWorld4(),
             createWorld5(),
+            createWorld6(),
         ]
 
         // Build cache
@@ -2345,6 +2346,811 @@ final class PuzzleManager {
                 p.y += wave;
                 float stripes = step(0.5, fract(p.y * 8.0));
                 return float4(stripes, stripes, stripes, 1.0);
+                """
+        )
+    }
+
+    // MARK: - World 6: Into the Third Dimension
+
+    private func createWorld6() -> World {
+        World(
+            number: 6,
+            title: "Into the Third Dimension",
+            description: "Enter the world of 3D! Learn to define shapes in three dimensions using signed distance functions. We provide the rendering—you write the shapes.",
+            puzzles: [
+                puzzle6_1(),
+                puzzle6_2(),
+                puzzle6_3(),
+                puzzle6_4(),
+                puzzle6_5(),
+                puzzle6_6(),
+            ]
+        )
+    }
+
+    // Shared 3D rendering helper that's included in all World 6 starter code
+    private var world6RenderHelper: String {
+        """
+        // === PROVIDED RENDERING CODE (do not modify) ===
+        float3 calcNormal(float3 p) {
+            float2 e = float2(0.001, 0.0);
+            return normalize(float3(
+                sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+            ));
+        }
+
+        float4 userFragment(float2 uv, constant Uniforms& u) {
+            // Camera setup
+            float3 ro = float3(0.0, 0.0, 3.0);  // Ray origin (camera position)
+            float3 rd = normalize(float3(uv - 0.5, -1.0));  // Ray direction
+
+            // Rotate camera around scene
+            float angle = u.time * 0.5;
+            float c = cos(angle);
+            float s = sin(angle);
+            ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+            rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+            // Raymarch
+            float t = 0.0;
+            for (int i = 0; i < 64; i++) {
+                float3 p = ro + rd * t;
+                float d = sceneSDF(p);
+                if (d < 0.001) break;
+                t += d;
+                if (t > 20.0) break;
+            }
+
+            // Shade
+            if (t < 20.0) {
+                float3 p = ro + rd * t;
+                float3 n = calcNormal(p);
+                float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                float diff = max(dot(n, lightDir), 0.0);
+                float amb = 0.2;
+                float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                return float4(col, 1.0);
+            }
+
+            return float4(0.1, 0.1, 0.15, 1.0);  // Background
+        }
+        // === END PROVIDED CODE ===
+        """
+    }
+
+    private func puzzle6_1() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 1),
+            title: "Sphere",
+            subtitle: "The simplest 3D shape",
+            description: """
+                Welcome to **3D**! You're about to write your first 3D signed distance function.
+
+                Just like in 2D, an SDF returns the distance from a point to the nearest surface. The 3D sphere SDF is beautifully simple:
+
+                ```
+                float sdSphere(float3 p, float radius) {
+                    return length(p) - radius;
+                }
+                ```
+
+                That's it! The [`length()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=85) function works the same in 3D—it measures distance from the origin.
+
+                We've provided the rendering code (raymarching + lighting). Your job: write `sceneSDF(float3 p)` that returns a sphere with radius 0.8.
+
+                Watch it spin! 🎉
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        return length(p) - 0.8;
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .sdf3d,
+                functionName: "sdSphere",
+                signature: "float sdSphere(float3 p, float r)",
+                implementation: "return length(p) - r;",
+                documentation: "Returns signed distance from point p to a sphere of radius r centered at origin."
+            ),
+            hints: [
+                Hint(cost: 0, text: "A sphere is all points at distance r from center. SDF = actual_distance - radius"),
+                Hint(cost: 0, text: "length(p) gives the distance from p to the origin in 3D"),
+                Hint(cost: 1, text: "return length(p) - radius; is the complete sphere SDF"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float sceneSDF(float3 p) {
+                        return length(p);  // ERROR: Missing - 0.8 for the radius
+                    }
+                    """),
+                Hint(cost: 3, text: "float sceneSDF(float3 p) { return length(p) - 0.8; }"),
+            ],
+            starterCode: """
+                // Write your 3D sphere SDF here
+                float sceneSDF(float3 p) {
+                    // TODO: Return distance to a sphere with radius 0.8
+                    // Hint: length(p) - radius
+
+                    return 1.0;  // Replace with sphere SDF
+                }
+
+                \(world6RenderHelper)
+                """,
+            solution: """
+                return length(p) - 0.8;
+                """
+        )
+    }
+
+    private func puzzle6_2() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 2),
+            title: "Box in Space",
+            subtitle: "Cubes and cuboids",
+            description: """
+                Now let's make a **3D box**! The formula is similar to 2D, but extended to 3D:
+
+                ```
+                float sdBox(float3 p, float3 b) {
+                    float3 d = abs(p) - b;
+                    return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                }
+                ```
+
+                Where `b` is the **half-extents** (half the box's size in each dimension).
+
+                The [`abs()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) function folds space into the positive quadrant, letting us define the box once and have it work for all 8 corners!
+
+                Create a box with dimensions 0.6 × 0.4 × 0.8 (half-extents: 0.3, 0.2, 0.4).
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float3 b = float3(0.3, 0.2, 0.4);
+                        float3 d = abs(p) - b;
+                        return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .sdf3d,
+                functionName: "sdBox3d",
+                signature: "float sdBox3d(float3 p, float3 b)",
+                implementation: "float3 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);",
+                documentation: "Returns signed distance from point p to a box with half-extents b."
+            ),
+            hints: [
+                Hint(cost: 0, text: "abs(p) folds all coordinates to positive, so we only need to compute one corner"),
+                Hint(cost: 0, text: "half-extents means the box extends from -b to +b in each axis"),
+                Hint(cost: 1, text: "float3 d = abs(p) - b; then combine the components with length() and min/max"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float sceneSDF(float3 p) {
+                        float3 b = float3(0.3, 0.2, 0.4);
+                        float3 d = abs(p) - b;
+                        return length(d);  // ERROR: Should be length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0)
+                    }
+                    """),
+                Hint(cost: 3, text: "float3 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);"),
+            ],
+            starterCode: """
+                // Write your 3D box SDF here
+                float sceneSDF(float3 p) {
+                    // Box half-extents (half the full size)
+                    float3 b = float3(0.3, 0.2, 0.4);
+
+                    // TODO: Implement box SDF
+                    // Step 1: float3 d = abs(p) - b;
+                    // Step 2: Combine with length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0)
+
+                    return 1.0;  // Replace with box SDF
+                }
+
+                \(world6RenderHelper)
+                """,
+            solution: """
+                float3 b = float3(0.3, 0.2, 0.4);
+                float3 d = abs(p) - b;
+                return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+                """
+        )
+    }
+
+    private func puzzle6_3() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 3),
+            title: "The Floor",
+            subtitle: "Infinite planes",
+            description: """
+                Let's add a **floor** to our scene! An infinite horizontal plane is the simplest SDF:
+
+                ```
+                float sdPlane(float3 p, float height) {
+                    return p.y - height;
+                }
+                ```
+
+                The distance to a horizontal plane at y=height is just how far above or below it you are!
+
+                Now you can **combine** multiple SDFs using the same operations from 2D:
+                - [`min()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=70) for union
+                - `max()` for intersection
+
+                Create a scene with a sphere (radius 0.5 at y=0.5) sitting on a floor at y=0.
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p - float3(0.0, 0.5, 0.0)) - 0.5;
+                        float plane = p.y;
+                        return min(sphere, plane);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 1.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .sdf3d,
+                functionName: "sdPlane",
+                signature: "float sdPlane(float3 p, float3 n, float h)",
+                implementation: "return dot(p, normalize(n)) + h;",
+                documentation: "Returns signed distance from point p to plane with normal n at height h."
+            ),
+            hints: [
+                Hint(cost: 0, text: "A horizontal floor at y=0 is just: p.y (distance above the floor)"),
+                Hint(cost: 0, text: "To place the sphere ON the floor, offset its center up by its radius"),
+                Hint(cost: 1, text: "Use min(sphereSDF, planeSDF) to combine them"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked errors
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p) - 0.5;  // ERROR: Sphere center should be at float3(0.0, 0.5, 0.0)
+                        float plane = p.y;
+                        return sphere;  // ERROR: Should be min(sphere, plane)
+                    }
+                    """),
+                Hint(cost: 3, text: "float sphere = length(p - float3(0.0, 0.5, 0.0)) - 0.5; float plane = p.y; return min(sphere, plane);"),
+            ],
+            starterCode: """
+                // Create a sphere sitting on a floor
+                float sceneSDF(float3 p) {
+                    // TODO: Sphere at y=0.5 with radius 0.5
+                    // Hint: length(p - center) - radius
+                    float sphere = 1.0;
+
+                    // TODO: Floor at y=0
+                    // Hint: p.y for a horizontal plane at y=0
+                    float plane = 1.0;
+
+                    // TODO: Combine with min()
+                    return 1.0;
+                }
+
+                // Modified render helper with camera at y=1.0
+                float3 calcNormal(float3 p) {
+                    float2 e = float2(0.001, 0.0);
+                    return normalize(float3(
+                        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                    ));
+                }
+
+                float4 userFragment(float2 uv, constant Uniforms& u) {
+                    float3 ro = float3(0.0, 1.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                }
+                """,
+            solution: """
+                float sphere = length(p - float3(0.0, 0.5, 0.0)) - 0.5;
+                float plane = p.y;
+                return min(sphere, plane);
+                """
+        )
+    }
+
+    private func puzzle6_4() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 4),
+            title: "Torus",
+            subtitle: "Donuts in 3D",
+            description: """
+                Time for a more interesting shape: the **torus** (donut)!
+
+                A torus is defined by two radii:
+                - **R**: distance from center to the tube center (the "big" radius)
+                - **r**: radius of the tube itself (the "small" radius)
+
+                ```
+                float sdTorus(float3 p, float R, float r) {
+                    float2 q = float2(length(p.xz) - R, p.y);
+                    return length(q) - r;
+                }
+                ```
+
+                The trick: first find distance to the ring (in xz plane), then find distance to the tube surface.
+
+                Create a torus with R=0.5 (ring radius) and r=0.2 (tube radius).
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float2 q = float2(length(p.xz) - 0.5, p.y);
+                        return length(q) - 0.2;
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .sdf3d,
+                functionName: "sdTorus",
+                signature: "float sdTorus(float3 p, float R, float r)",
+                implementation: "float2 q = float2(length(p.xz) - R, p.y); return length(q) - r;",
+                documentation: "Returns signed distance from point p to a torus with ring radius R and tube radius r."
+            ),
+            hints: [
+                Hint(cost: 0, text: "p.xz gives the horizontal position. length(p.xz) is the distance from the vertical axis"),
+                Hint(cost: 0, text: "Subtracting R gives the distance to the ring centerline"),
+                Hint(cost: 1, text: "float2 q = float2(length(p.xz) - R, p.y); then length(q) - r gives the tube distance"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float sceneSDF(float3 p) {
+                        float2 q = float2(length(p.xz), p.y);  // ERROR: Missing - 0.5 after length(p.xz)
+                        return length(q) - 0.2;
+                    }
+                    """),
+                Hint(cost: 3, text: "float2 q = float2(length(p.xz) - 0.5, p.y); return length(q) - 0.2;"),
+            ],
+            starterCode: """
+                // Write your torus SDF here
+                float sceneSDF(float3 p) {
+                    // Torus parameters
+                    float R = 0.5;  // Ring radius (big)
+                    float r = 0.2;  // Tube radius (small)
+
+                    // TODO: Step 1 - Project to ring plane
+                    // float2 q = float2(length(p.xz) - R, p.y);
+
+                    // TODO: Step 2 - Distance to tube
+                    // return length(q) - r;
+
+                    return 1.0;  // Replace with torus SDF
+                }
+
+                \(world6RenderHelper)
+                """,
+            solution: """
+                float2 q = float2(length(p.xz) - 0.5, p.y);
+                return length(q) - 0.2;
+                """
+        )
+    }
+
+    private func puzzle6_5() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 5),
+            title: "Capsule",
+            subtitle: "Pills and tubes",
+            description: """
+                A **capsule** (also called a "stadium" in 2D or "pill" shape) is a cylinder with hemispherical caps. It's defined by two endpoints and a radius.
+
+                The SDF finds the closest point on the line segment, then measures distance to that point:
+
+                ```
+                float sdCapsule(float3 p, float3 a, float3 b, float r) {
+                    float3 pa = p - a;
+                    float3 ba = b - a;
+                    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    return length(pa - ba * h) - r;
+                }
+                ```
+
+                The [`clamp()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=80) ensures we stay between the endpoints. The [`dot()`](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf#page=85) projects the point onto the line.
+
+                Create a vertical capsule from (0, -0.5, 0) to (0, 0.5, 0) with radius 0.3.
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float3 a = float3(0.0, -0.5, 0.0);
+                        float3 b = float3(0.0, 0.5, 0.0);
+                        float r = 0.3;
+                        float3 pa = p - a;
+                        float3 ba = b - a;
+                        float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                        return length(pa - ba * h) - r;
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.97), tolerance: 0.02),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus"],
+            unlocksPrimitive: PrimitiveUnlock(
+                category: .sdf3d,
+                functionName: "sdCapsule",
+                signature: "float sdCapsule(float3 p, float3 a, float3 b, float r)",
+                implementation: "float3 pa = p - a; float3 ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r;",
+                documentation: "Returns signed distance from point p to a capsule from a to b with radius r."
+            ),
+            hints: [
+                Hint(cost: 0, text: "dot(pa, ba) / dot(ba, ba) projects point p onto line ab (as parameter 0-1)"),
+                Hint(cost: 0, text: "clamp() keeps the projection between the endpoints"),
+                Hint(cost: 1, text: "pa - ba * h gives the vector from the closest line point to p"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float sceneSDF(float3 p) {
+                        float3 a = float3(0.0, -0.5, 0.0);
+                        float3 b = float3(0.0, 0.5, 0.0);
+                        float r = 0.3;
+                        float3 pa = p - a;
+                        float3 ba = b - a;
+                        float h = dot(pa, ba) / dot(ba, ba);  // ERROR: Missing clamp(..., 0.0, 1.0)
+                        return length(pa - ba * h) - r;
+                    }
+                    """),
+                Hint(cost: 3, text: "float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r;"),
+            ],
+            starterCode: """
+                // Write your capsule SDF here
+                float sceneSDF(float3 p) {
+                    // Capsule endpoints and radius
+                    float3 a = float3(0.0, -0.5, 0.0);  // Bottom
+                    float3 b = float3(0.0, 0.5, 0.0);   // Top
+                    float r = 0.3;                      // Radius
+
+                    // TODO: Implement capsule SDF
+                    // Step 1: float3 pa = p - a;
+                    // Step 2: float3 ba = b - a;
+                    // Step 3: float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                    // Step 4: return length(pa - ba * h) - r;
+
+                    return 1.0;  // Replace with capsule SDF
+                }
+
+                \(world6RenderHelper)
+                """,
+            solution: """
+                float3 a = float3(0.0, -0.5, 0.0);
+                float3 b = float3(0.0, 0.5, 0.0);
+                float r = 0.3;
+                float3 pa = p - a;
+                float3 ba = b - a;
+                float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                return length(pa - ba * h) - r;
+                """
+        )
+    }
+
+    private func puzzle6_6() -> Puzzle {
+        Puzzle(
+            id: PuzzleID(world: 6, index: 6),
+            title: "3D Operations",
+            subtitle: "Combining shapes",
+            description: """
+                Now let's combine 3D shapes using the same operations from 2D!
+
+                ```
+                float opUnion(float d1, float d2) { return min(d1, d2); }
+                float opSubtract(float d1, float d2) { return max(d1, -d2); }
+                float opIntersect(float d1, float d2) { return max(d1, d2); }
+                ```
+
+                **Your challenge**: Create a sphere with a cylindrical hole through it!
+
+                - Sphere: radius 0.6, centered at origin
+                - Cylinder: use a 2D circle SDF on xz plane (infinite cylinder along y)
+                - Subtract the cylinder from the sphere
+
+                ```
+                float cylinder = length(p.xz) - 0.25;  // Infinite cylinder along y-axis
+                ```
+                """,
+            reference: .animation(
+                shader: """
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p) - 0.6;
+                        float cylinder = length(p.xz) - 0.25;
+                        return max(sphere, -cylinder);
+                    }
+
+                    float3 calcNormal(float3 p) {
+                        float2 e = float2(0.001, 0.0);
+                        return normalize(float3(
+                            sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+                            sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+                            sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+                        ));
+                    }
+
+                    float3 ro = float3(0.0, 0.0, 3.0);
+                    float3 rd = normalize(float3(uv - 0.5, -1.0));
+                    float angle = u.time * 0.5;
+                    float c = cos(angle);
+                    float s = sin(angle);
+                    ro = float3(ro.x * c - ro.z * s, ro.y, ro.x * s + ro.z * c);
+                    rd = float3(rd.x * c - rd.z * s, rd.y, rd.x * s + rd.z * c);
+
+                    float t = 0.0;
+                    for (int i = 0; i < 64; i++) {
+                        float3 p = ro + rd * t;
+                        float d = sceneSDF(p);
+                        if (d < 0.001) break;
+                        t += d;
+                        if (t > 20.0) break;
+                    }
+
+                    if (t < 20.0) {
+                        float3 p = ro + rd * t;
+                        float3 n = calcNormal(p);
+                        float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+                        float diff = max(dot(n, lightDir), 0.0);
+                        float amb = 0.2;
+                        float3 col = float3(0.8, 0.6, 0.4) * (diff + amb);
+                        return float4(col, 1.0);
+                    }
+                    return float4(0.1, 0.1, 0.15, 1.0);
+                    """,
+                duration: 12.56
+            ),
+            verification: VerificationSettings(mode: .animation(frameCount: 20, threshold: 0.96), tolerance: 0.03),
+            availablePrimitives: ["sdCircle", "smoothEdge", "sdBox", "sdRoundedBox", "opUnion", "opSubtract", "opSmoothUnion", "sdSegment", "palette", "hsv2rgb", "colorRamp", "blendScreen", "hash", "valueNoise", "voronoi", "fbm", "checker", "easeInOut", "orbit2d", "wave", "sdSphere", "sdBox3d", "sdPlane", "sdTorus", "sdCapsule"],
+            unlocksPrimitive: nil,  // Reusing 2D operations concept
+            hints: [
+                Hint(cost: 0, text: "length(p.xz) creates an infinite cylinder along the y-axis"),
+                Hint(cost: 0, text: "Subtraction is max(d1, -d2) - negate the shape you're cutting away"),
+                Hint(cost: 1, text: "sphere = length(p) - 0.6; cylinder = length(p.xz) - 0.25; return max(sphere, -cylinder);"),
+                Hint(cost: 2, text: """
+                    // GUIDED SOLUTION - Fix the marked error
+                    float sceneSDF(float3 p) {
+                        float sphere = length(p) - 0.6;
+                        float cylinder = length(p.xz) - 0.25;
+                        return min(sphere, cylinder);  // ERROR: Should be max(sphere, -cylinder) for subtraction
+                    }
+                    """),
+                Hint(cost: 3, text: "float sphere = length(p) - 0.6; float cylinder = length(p.xz) - 0.25; return max(sphere, -cylinder);"),
+            ],
+            starterCode: """
+                // Create a sphere with a cylindrical hole
+                float sceneSDF(float3 p) {
+                    // TODO: Sphere (radius 0.6)
+                    float sphere = 1.0;
+
+                    // TODO: Infinite cylinder along y-axis (radius 0.25)
+                    // Hint: length(p.xz) - radius
+                    float cylinder = 1.0;
+
+                    // TODO: Subtract cylinder from sphere
+                    // Hint: max(d1, -d2)
+                    return 1.0;
+                }
+
+                \(world6RenderHelper)
+                """,
+            solution: """
+                float sphere = length(p) - 0.6;
+                float cylinder = length(p.xz) - 0.25;
+                return max(sphere, -cylinder);
                 """
         )
     }
