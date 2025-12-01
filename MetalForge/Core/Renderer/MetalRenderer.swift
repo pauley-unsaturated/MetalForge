@@ -1,9 +1,11 @@
 import MetalKit
+import Observation
 import simd
 
 /// Core Metal renderer for shader preview
+@Observable
 @MainActor
-final class MetalRenderer: NSObject, ObservableObject {
+final class MetalRenderer: NSObject {
     // MARK: - Metal Objects
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
@@ -13,8 +15,8 @@ final class MetalRenderer: NSObject, ObservableObject {
     private var uniformBuffer: MTLBuffer?
 
     // MARK: - State
-    @Published var isReady = false
-    @Published var lastError: ShaderError?
+    var isReady = false
+    var lastError: ShaderError?
 
     private(set) var currentTexture: MTLTexture?
     private var startTime: CFTimeInterval = 0
@@ -231,6 +233,49 @@ final class MetalRenderer: NSObject, ObservableObject {
 
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+
+        currentTexture = texture
+    }
+
+    /// Render to a drawable and present it (for MTKView usage)
+    func render(to drawable: any CAMetalDrawable) {
+        guard let pipelineState = pipelineState,
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
+            return
+        }
+
+        let texture = drawable.texture
+
+        // Update uniforms
+        if isPlaying {
+            uniforms.time = Float(CACurrentMediaTime() - startTime)
+        }
+        uniforms.resolution = SIMD2<Float>(Float(texture.width), Float(texture.height))
+
+        uniformBuffer?.contents().copyMemory(
+            from: &uniforms,
+            byteCount: MemoryLayout<Uniforms>.stride
+        )
+
+        // Create render pass
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = texture
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+
+        encoder.setRenderPipelineState(pipelineState)
+        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        encoder.setFragmentBuffer(uniformBuffer, offset: 0, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
 
         currentTexture = texture
     }

@@ -212,10 +212,16 @@ struct WorldCard: View {
         world.puzzles.filter { appState.completedPuzzles.contains($0.id) }.count
     }
 
+    /// First unsolved puzzle, or last puzzle if all completed
+    var nextPuzzle: Puzzle? {
+        world.puzzles.first { !appState.completedPuzzles.contains($0.id) }
+            ?? world.puzzles.last
+    }
+
     var body: some View {
         Button(action: {
-            if isUnlocked, let firstPuzzle = world.puzzles.first {
-                appState.loadPuzzle(firstPuzzle.id)
+            if isUnlocked, let puzzle = nextPuzzle {
+                appState.loadPuzzle(puzzle.id)
             }
         }) {
             VStack(alignment: .leading, spacing: 12) {

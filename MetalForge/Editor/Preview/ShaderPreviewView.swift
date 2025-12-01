@@ -27,17 +27,12 @@ struct MetalView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> MTKView {
-        let mtkView = MTKView()
+        // Create MTKView with explicit frame
+        let frame = CGRect(origin: .zero, size: size)
+        let mtkView = MTKView(frame: frame)
 
-        if renderer == nil {
-            renderer = MetalRenderer()
-        }
-
-        guard let renderer = renderer else {
-            return mtkView
-        }
-
-        mtkView.device = renderer.device
+        // Use the coordinator's device (coordinator owns its own Metal device)
+        mtkView.device = context.coordinator.device
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         mtkView.delegate = context.coordinator
@@ -45,17 +40,30 @@ struct MetalView: NSViewRepresentable {
         mtkView.isPaused = false
         mtkView.preferredFramesPerSecond = 60
 
-        context.coordinator.renderer = renderer
+        // Sync with external renderer if already available
+        if let renderer = renderer {
+            context.coordinator.renderer = renderer
+        }
 
         return mtkView
     }
 
     func updateNSView(_ mtkView: MTKView, context: Context) {
-        context.coordinator.renderer = renderer
+        // Sync coordinator's renderer with the binding when it changes
+        if let renderer = renderer {
+            context.coordinator.renderer = renderer
+        }
     }
 
     class Coordinator: NSObject, MTKViewDelegate {
+        // Coordinator owns a Metal device for MTKView setup
+        let device: MTLDevice
         var renderer: MetalRenderer?
+
+        override init() {
+            self.device = MTLCreateSystemDefaultDevice()!
+            super.init()
+        }
 
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
             // Handle resize if needed
@@ -67,14 +75,10 @@ struct MetalView: NSViewRepresentable {
                 return
             }
 
-            renderer.render(to: drawable.texture)
-
-            guard let commandBuffer = renderer.commandQueue.makeCommandBuffer() else {
-                return
+            // MTKViewDelegate is called on the main thread
+            MainActor.assumeIsolated {
+                renderer.render(to: drawable)
             }
-
-            commandBuffer.present(drawable)
-            commandBuffer.commit()
         }
     }
 }

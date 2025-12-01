@@ -46,15 +46,39 @@ struct PuzzleView: View {
         .foregroundColor(.white)
         .onAppear {
             setupRenderers()
-            if let puzzle = puzzle {
-                appState.userCode = puzzle.starterCode
-                compileShader()
-                compileReference()
-            }
+            loadPuzzle()
+        }
+        .onChange(of: puzzleID) { _, _ in
+            loadPuzzle()
+        }
+    }
+
+    private func loadPuzzle() {
+        if let puzzle = puzzle {
+            appState.userCode = puzzle.starterCode
+            appState.verificationResult = nil
+            appState.lastCompilationResult = nil
+            appState.currentHintIndex = 0
+            compileShader()
+            compileReference()
         }
     }
 
     // MARK: - Header
+
+    private var worldPuzzles: [Puzzle] {
+        PuzzleManager.shared.puzzles(forWorld: puzzleID.world)
+    }
+
+    private func isPuzzleAccessible(_ puzzle: Puzzle) -> Bool {
+        // Can access if: completed, or is the first unsolved puzzle
+        if appState.completedPuzzles.contains(puzzle.id) {
+            return true
+        }
+        // First unsolved puzzle is accessible
+        let firstUnsolved = worldPuzzles.first { !appState.completedPuzzles.contains($0.id) }
+        return puzzle.id == firstUnsolved?.id
+    }
 
     private func puzzleHeader(_ puzzle: Puzzle) -> some View {
         HStack {
@@ -70,14 +94,43 @@ struct PuzzleView: View {
 
             Spacer()
 
-            // Puzzle info
-            VStack(spacing: 2) {
-                Text("World \(puzzleID.world): \(worldTitle)")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                Text(puzzle.title)
-                    .font(.headline)
+            // Puzzle selector
+            Menu {
+                ForEach(worldPuzzles) { p in
+                    Button(action: {
+                        if isPuzzleAccessible(p) {
+                            appState.loadPuzzle(p.id)
+                        }
+                    }) {
+                        HStack {
+                            Text("\(p.id.index). \(p.title)")
+                            Spacer()
+                            if appState.completedPuzzles.contains(p.id) {
+                                Image(systemName: "checkmark.circle.fill")
+                            } else if p.id == puzzleID {
+                                Image(systemName: "circle.fill")
+                            }
+                        }
+                    }
+                    .disabled(!isPuzzleAccessible(p))
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    VStack(spacing: 2) {
+                        Text("World \(puzzleID.world): \(worldTitle)")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        HStack(spacing: 4) {
+                            Text(puzzle.title)
+                                .font(.headline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
             }
+            .menuStyle(.borderlessButton)
 
             Spacer()
 
@@ -88,10 +141,10 @@ struct PuzzleView: View {
                         .foregroundColor(.green)
                 }
 
-                Button(action: { /* Settings */ }) {
-                    Image(systemName: "gear")
-                }
-                .buttonStyle(.plain)
+                // Puzzle progress in world
+                Text("\(worldPuzzles.filter { appState.completedPuzzles.contains($0.id) }.count)/\(worldPuzzles.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.gray)
             }
         }
         .padding()
